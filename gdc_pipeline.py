@@ -178,19 +178,19 @@ def setup_args():
         "--intent-model-path",
         dest="intent_model_path",
         help="path to trained BERT model for user intent",
-        default="/opt/gpudata/aartiv/rag_rig/query_intent_model.pt",
+        default="/opt/gpudata/aartiv/qag/query_intent_model.pt",
     )
     parser.add_argument(
         "--path-to-gdc-genes-mutations-file",
         dest="path_to_gdc_genes_mutations_file",
         help="path to dumped genes and mutations info from gdc",
-        default="/opt/gpudata/aartiv/rag_rig/gdc_genes_mutations.json",
+        default="/opt/gpudata/aartiv/qag/gdc_genes_mutations.json",
     )
     parser.add_argument(
         "--hf-token-path",
         dest="hf_token_path",
         help="path to hugging face token",
-        default="/opt/gpudata/aartiv/rag_rig/huggingface_token.txt",
+        default="/opt/gpudata/aartiv/qag/huggingface_token.txt",
     )
     return parser.parse_args()
 

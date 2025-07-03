@@ -13,7 +13,7 @@ import requests
 # load project_mappings
 # the function to create this tsv file is a one-time run, found as one of the api functions below
 project_mappings = pd.read_csv(
-    "../gdc_projects.tsv", sep="\t", index_col=0, names=["project", "desc"]
+    "../csvs/gdc_projects.tsv", sep="\t", index_col=0, names=["project", "desc"]
 )
 project_mappings["desc"] = project_mappings["desc"].apply(ast.literal_eval)
 project_mappings = project_mappings["desc"].to_dict()

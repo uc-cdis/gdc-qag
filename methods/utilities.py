@@ -25,7 +25,8 @@ def load_llama_llm():
     guided_decoding_params = GuidedDecodingParams(
         regex="The final answer is: \d*\.\d*%"
     )
-    llm = LLM(model=model_id, trust_remote_code=True, enforce_eager=True)
+    # add dtype=half if not using A100 (e.g. titan or V100)
+    llm = LLM(model=model_id, dtype="half", trust_remote_code=True, enforce_eager=True)
     sampling_params_with_constrained_decoding = SamplingParams(
         n=1,
         temperature=0,

@@ -1,0 +1,39 @@
+[project]
+name = "gdc-qag"
+version = "0.1.0"
+description = "a package to run query augmented generation on the genomic data commons"
+authors = [
+    {name = "aartiv",email = "aartiv@uchicago.edu"}
+]
+readme = "README.md"
+requires-python = "3.9.2"
+dependencies = [
+    "spacy (==3.7.5)",
+    "en-core-sci-md @ https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_md-0.5.4.tar.gz#sha256=7c8fc52542dd1452ffce00b045c1298e2c185b7cf84793f8e0ec941987c09808",
+    "en-ner-bc5cdr-md @ https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_ner_bc5cdr_md-0.5.4.tar.gz#sha256=ffc73130a710edf851206199720cb2c744a043e032f5da6ba4bb36863deca778",
+    "huggingface-hub (>=0.33.2,<0.34.0)",
+    "langchain (>=0.3.26,<0.4.0)",
+    "langchain-core (>=0.3.68,<0.4.0)",
+    "langchain-text-splitters (>=0.3.8,<0.4.0)",
+    "langsmith (>=0.4.4,<0.5.0)",
+    "matplotlib-inline (>=0.1.7,<0.2.0)",
+    "numpy (==1.26.4)",
+    "pandas (==2.2.3)",
+    "requests (>=2.32.4,<3.0.0)",
+    "torch (==2.5.1)",
+    "tqdm (>=4.67.1,<5.0.0)",
+    "transformers (==4.49.0)",
+    "uvicorn (>=0.35.0,<0.36.0)",
+    "uvloop (==0.21.0)",
+    "vllm (==0.7.2)"
+]
+package-mode = false
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^4.2.0"
+
