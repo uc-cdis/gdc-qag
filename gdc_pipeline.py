@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 # GDC-RAG pipeline entry point script
 
-
-import argparse
-import ast
-
 # import libraries
+import argparse
+import json
 import os
 from types import SimpleNamespace
 
 import pandas as pd
+from openai import OpenAI
 from tqdm import tqdm
 
 from methods import gdc_api_calls, utilities
+from methods.tools import (
+    construct_tools_list,
+    get_cnv_and_ssm,
+    get_freq_cnv_loss_or_gain,
+    get_msi_h_frequency,
+    get_ssm_frequency,
+    get_top_cases_counts_by_gene,
+    tool_functions_list,
+)
 
 tqdm.pandas()
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="dummy")
 
 
 def execute_api_call(
@@ -26,36 +36,29 @@ def execute_api_call(
     gdc_genes_mutations,
     project_mappings,
 ):
-    if intent == "ssm_frequency":
-        result, cancer_entities = utilities.get_ssm_frequency(
-            gene_entities, mutation_entities, cancer_entities, project_mappings
-        )
-    elif intent == "top_mutated_genes_by_project":
-        result = gdc_api_calls.get_top_mutated_genes_by_project(
-            cancer_entities, top_k=10
-        )
-    elif intent == "most_frequently_mutated_gene":
-        result = gdc_api_calls.get_top_mutated_genes_by_project(
-            cancer_entities, top_k=1
-        )
-    elif intent == "freq_cnv_loss_or_gain":
-        result, cancer_entities = gdc_api_calls.get_freq_cnv_loss_or_gain(
-            gene_entities, cancer_entities, query, cnv_and_ssm_flag=False
-        )
-    elif intent == "msi_h_frequency":
-        result, cancer_entities = gdc_api_calls.get_msi_frequency(cancer_entities)
-    elif intent == "cnv_and_ssm":
-        result, cancer_entities = utilities.get_freq_of_cnv_and_ssms(
-            query, cancer_entities, gene_entities, gdc_genes_mutations
-        )
-    elif intent == "top_cases_counts_by_gene":
-        result, cancer_entities = gdc_api_calls.get_top_cases_counts_by_gene(
-            gene_entities, cancer_entities
-        )
-    elif intent == "project_summary":
-        result = gdc_api_calls.get_project_summary(cancer_entities)
-    else:
-        result = "user intent not recognized, or use case not covered"
+    # TO-DO
+    # return a intent not recognized response if no intent match
+    content = "Get results for intent {}".format(intent)
+    tools = construct_tools_list(
+        gene_entities,
+        mutation_entities,
+        cancer_entities,
+        project_mappings,
+        query,
+        gdc_genes_mutations,
+    )
+    response = client.chat.completions.create(
+        model=client.models.list().data[0].id,
+        messages=[{"role": "user", "content": content}],
+        tools=tools,
+        tool_choice="auto",
+    )
+    tool_call = response.choices[0].message.tool_calls[0].function
+    print(f"Function called: {tool_call.name}")
+    print(f"Arguments: {tool_call.arguments}")
+    result, cancer_entities = tool_functions_list[tool_call.name](
+        **json.loads(tool_call.arguments)
+    )
     return result, cancer_entities
 
 
@@ -214,7 +217,7 @@ def execute_pipeline(
         path_to_gdc_genes_mutations
     )
 
-    print("loading llama model")
+    print("loading guided decoding params")
     llm, sampling_params = utilities.load_llama_llm()
 
     # queries input file

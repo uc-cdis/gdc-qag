@@ -26,7 +26,13 @@ def load_llama_llm():
         regex="The final answer is: \d*\.\d*%"
     )
     # add dtype=half if not using A100 (e.g. titan or V100)
-    llm = LLM(model=model_id, dtype="half", trust_remote_code=True, enforce_eager=True)
+    llm = LLM(
+        model=model_id,
+        dtype="half",
+        trust_remote_code=True,
+        enforce_eager=True,
+        max_model_len=8184,
+    )
     sampling_params_with_constrained_decoding = SamplingParams(
         n=1,
         temperature=0,
@@ -37,6 +43,13 @@ def load_llama_llm():
         guided_decoding=guided_decoding_params,
     )
     return llm, sampling_params_with_constrained_decoding
+
+
+def set_guided_decoding_params():
+    guided_decoding_params = GuidedDecodingParams(
+        regex="The final answer is: \d*\.\d*%"
+    )
+    return guided_decoding_params
 
 
 def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
@@ -391,6 +404,19 @@ def infer_mutation_entities(gene_entities, query, gdc_genes_mutations):
     return mutation_entities
 
 
+def get_prefinal_response(row, llm, sampling_params):
+    try:
+        query = row["questions"]
+        helper_output = row["helper_output"]
+    except Exception as e:
+        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
+    modified_query = construct_modified_query(query, helper_output)
+    prefinal_llama_with_helper_output = (
+        llm.generate(modified_query, sampling_params)[0].outputs[0].text
+    )
+    return pd.Series([modified_query, prefinal_llama_with_helper_output])
+
+
 def postprocess_response(row):
     value_changed = "no"
     pattern = r".*?(\d*\.\d*)%.*?"
@@ -466,19 +492,6 @@ def postprocess_response(row):
             final_response,
         ]
     )
-
-
-def get_prefinal_response(row, llm, sampling_params):
-    try:
-        query = row["questions"]
-        helper_output = row["helper_output"]
-    except Exception as e:
-        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
-    modified_query = construct_modified_query(query, helper_output)
-    prefinal_llama_with_helper_output = (
-        llm.generate(modified_query, sampling_params)[0].outputs[0].text
-    )
-    return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
 
 def set_hf_token(token_path):
