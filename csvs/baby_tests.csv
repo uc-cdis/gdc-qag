@@ -1,2 +1,6 @@
 questions
 What is the frequency of KRAS G12D mutation in the colon adenocarcinoma project TCGA-COAD in the genomic data commons?
+What is the co-occurence frequency of IDH1 R132H and TP53 R273C simple somatic mutations in the low grade glioma project TCGA-LGG in the genomic data commons?
+What is the frequency of somatic homozygous deletions in CDKN2A in the lung squamous cell carcinoma project TCGA-LUSC in the genomic data commons?
+What percentage of ovarian serous cystadenocarcinoma cases have a somatic heterozygous deletion in BRCA1 and simple somatic mutations in BRCA1 in the genomic data commons?
+In Stomach Adenocarcinoma TCGA-STAD project what is the occurrence rate of microsatellite instability in the genomic data commons?

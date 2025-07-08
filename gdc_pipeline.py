@@ -3,6 +3,7 @@
 
 # import libraries
 import argparse
+import inspect
 import json
 import os
 from types import SimpleNamespace
@@ -14,12 +15,13 @@ from tqdm import tqdm
 from methods import gdc_api_calls, utilities
 from methods.tools import (
     construct_tools_list,
+    construct_tools_params_dict,
     get_cnv_and_ssm,
     get_freq_cnv_loss_or_gain,
     get_msi_h_frequency,
     get_ssm_frequency,
     get_top_cases_counts_by_gene,
-    tool_functions_list,
+    tool_functions_list
 )
 
 tqdm.pandas()
@@ -38,24 +40,38 @@ def execute_api_call(
 ):
     # TO-DO
     # return a intent not recognized response if no intent match
-    content = "Get results for intent {}".format(intent)
-    tools = construct_tools_list(
-        gene_entities,
-        mutation_entities,
-        cancer_entities,
-        project_mappings,
-        query,
-        gdc_genes_mutations,
-    )
+    # content = "Get results for intent {}, populate all default values in tool arguments. When generating tool arguments, ensure that any list-type arguments are returned as python lists, not strings".format(intent)
+    content = 'Get results for intent {}'.format(intent)
+    tools = construct_tools_list()
+    print('tools {}'.format(tools))
+    print('completed constructing tools list')
+    tools_params_dict = construct_tools_params_dict(
+        intent, gene_entities, mutation_entities, cancer_entities,
+        project_mappings, query, gdc_genes_mutations)
+    
+    print('sending request to client for content {}'.format(content))
     response = client.chat.completions.create(
         model=client.models.list().data[0].id,
         messages=[{"role": "user", "content": content}],
         tools=tools,
         tool_choice="auto",
+        temperature=0,
+        seed=42,
+        n=1
     )
+    print('received response {}'.format(response))
     tool_call = response.choices[0].message.tool_calls[0].function
     print(f"Function called: {tool_call.name}")
     print(f"Arguments: {tool_call.arguments}")
+    
+    # inspect signature and manually inject args
+    sig = inspect.signature(tool_functions_list[tool_call.name])
+    arg_names = list(sig.parameters.keys())
+    print('arg_names {}'.format(arg_names))
+    args_dict = {name: tools_params_dict[name] for name in arg_names}
+    # override tool call args with args_dict
+    tool_call.arguments = json.dumps(args_dict)
+    # execute
     result, cancer_entities = tool_functions_list[tool_call.name](
         **json.loads(tool_call.arguments)
     )

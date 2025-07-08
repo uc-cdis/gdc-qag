@@ -68,15 +68,9 @@ tool_functions_list = {
 }
 
 
+
 # define individual tools
-def construct_tools_list(
-    gene_entities,
-    mutation_entities,
-    cancer_entities,
-    project_mappings,
-    query,
-    gdc_genes_mutations,
-):
+def construct_tools_list():
     tools = [
         {
             "type": "function",
@@ -90,36 +84,12 @@ def construct_tools_list(
                             "type": "string",
                             "description": "intent to guide endpoint mapping, e.g., 'ssm_frequency'",
                         },
-                        "gene_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": gene_entities,
-                        },
-                        "mutation_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": mutation_entities,
-                        },
-                        "cancer_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": cancer_entities,
-                        },
-                        "project_mappings": {
-                            "type": "dict",
-                            "description": "optional argument",
-                            "default": project_mappings,
-                        },
+                        "required": [
+                            "intent"
+                        ],
                     },
-                    "required": [
-                        "intent",
-                        "gene_entities",
-                        "mutation_entities",
-                        "cancer_entities",
-                        "project_mappings",
-                    ],
                 },
-            },
+            }
         },
         {
             "type": "function",
@@ -133,23 +103,8 @@ def construct_tools_list(
                             "type": "string",
                             "description": "intent to guide endpoint mapping, e.g., 'freq_cnv_loss_or_gain'",
                         },
-                        "gene_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": gene_entities,
-                        },
-                        "cancer_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": cancer_entities,
-                        },
-                        "query": {
-                            "type": "str",
-                            "description": "optional argument",
-                            "default": query,
-                        },
                     },
-                    "required": ["intent", "gene_entities", "cancer_entities", "query"],
+                    "required": ["intent"],
                 },
             },
         },
@@ -165,13 +120,8 @@ def construct_tools_list(
                             "type": "string",
                             "description": "intent to guide endpoint mapping, e.g., 'msi_h_frequency'",
                         },
-                        "cancer_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": cancer_entities,
-                        },
                     },
-                    "required": ["intent", "cancer_entities"],
+                    "required": ["intent"],
                 },
             },
         },
@@ -187,33 +137,9 @@ def construct_tools_list(
                             "type": "string",
                             "description": "intent to guide endpoint mapping, e.g., 'cnv_and_ssm'",
                         },
-                        "query": {
-                            "type": "string",
-                            "description": "optional argument",
-                            "default": query,
-                        },
-                        "gene_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": gene_entities,
-                        },
-                        "cancer_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": cancer_entities,
-                        },
-                        "gdc_genes_mutations": {
-                            "type": "dict",
-                            "description": "optional argument",
-                            "default": gdc_genes_mutations,
-                        },
                     },
                     "required": [
-                        "intent",
-                        "query",
-                        "gene_entities",
-                        "cancer_entities",
-                        "gdc_genes_mutations",
+                        "intent"
                     ],
                 },
             },
@@ -230,20 +156,28 @@ def construct_tools_list(
                             "type": "string",
                             "description": "intent to guide endpoint mapping e.g., 'top_cases_counts_by_gene'",
                         },
-                        "gene_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": gene_entities,
-                        },
-                        "cancer_entities": {
-                            "type": "list",
-                            "description": "optional argument",
-                            "default": cancer_entities,
-                        },
                     },
-                    "required": ["intent", "gene_entities", "cancer_entities"],
+                    "required": ["intent"],
                 },
             },
         },
     ]
     return tools
+
+
+
+# define tools params dict
+def construct_tools_params_dict(
+    intent, gene_entities, mutation_entities, cancer_entities,
+    project_mappings, query, gdc_genes_mutations
+):
+    tools_params_dict = {
+        'intent': intent,
+        'gene_entities': gene_entities,
+        'mutation_entities': mutation_entities,
+        'cancer_entities': cancer_entities,
+        'project_mappings': project_mappings,
+        'query': query,
+        'gdc_genes_mutations': gdc_genes_mutations
+    }
+    return tools_params_dict
