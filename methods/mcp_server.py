@@ -21,12 +21,14 @@ p_vllm = subprocess.Popen(
         "meta-llama/Llama-3.2-3B-Instruct",
         "--dtype",
         "float16",
-        "--max-model-len", "8184",
+        "--max-model-len",
+        "8184",
         "--enforce-eager",
         "--trust-remote-code",
         "--enable-auto-tool-choice",
         "--tool-call-parser",
         "llama3_json",
-        "--chat-template", os.path.join(proj_root, 'methods', 'tool_chat_template_llama3.1_json.jinja'),
+        "--chat-template",
+        os.path.join(proj_root, "methods", "tool_chat_template_llama3.1_json.jinja"),
     ]
 )

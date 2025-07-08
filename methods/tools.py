@@ -68,7 +68,6 @@ tool_functions_list = {
 }
 
 
-
 # define individual tools
 def construct_tools_list():
     tools = [
@@ -84,12 +83,10 @@ def construct_tools_list():
                             "type": "string",
                             "description": "intent to guide endpoint mapping, e.g., 'ssm_frequency'",
                         },
-                        "required": [
-                            "intent"
-                        ],
+                        "required": ["intent"],
                     },
                 },
-            }
+            },
         },
         {
             "type": "function",
@@ -138,9 +135,7 @@ def construct_tools_list():
                             "description": "intent to guide endpoint mapping, e.g., 'cnv_and_ssm'",
                         },
                     },
-                    "required": [
-                        "intent"
-                    ],
+                    "required": ["intent"],
                 },
             },
         },
@@ -165,19 +160,23 @@ def construct_tools_list():
     return tools
 
 
-
 # define tools params dict
 def construct_tools_params_dict(
-    intent, gene_entities, mutation_entities, cancer_entities,
-    project_mappings, query, gdc_genes_mutations
+    intent,
+    gene_entities,
+    mutation_entities,
+    cancer_entities,
+    project_mappings,
+    query,
+    gdc_genes_mutations,
 ):
     tools_params_dict = {
-        'intent': intent,
-        'gene_entities': gene_entities,
-        'mutation_entities': mutation_entities,
-        'cancer_entities': cancer_entities,
-        'project_mappings': project_mappings,
-        'query': query,
-        'gdc_genes_mutations': gdc_genes_mutations
+        "intent": intent,
+        "gene_entities": gene_entities,
+        "mutation_entities": mutation_entities,
+        "cancer_entities": cancer_entities,
+        "project_mappings": project_mappings,
+        "query": query,
+        "gdc_genes_mutations": gdc_genes_mutations,
     }
     return tools_params_dict

@@ -21,7 +21,7 @@ from methods.tools import (
     get_msi_h_frequency,
     get_ssm_frequency,
     get_top_cases_counts_by_gene,
-    tool_functions_list
+    tool_functions_list,
 )
 
 tqdm.pandas()
@@ -41,15 +41,21 @@ def execute_api_call(
     # TO-DO
     # return a intent not recognized response if no intent match
     # content = "Get results for intent {}, populate all default values in tool arguments. When generating tool arguments, ensure that any list-type arguments are returned as python lists, not strings".format(intent)
-    content = 'Get results for intent {}'.format(intent)
+    content = "Get results for intent {}".format(intent)
     tools = construct_tools_list()
-    print('tools {}'.format(tools))
-    print('completed constructing tools list')
+    print("tools {}".format(tools))
+    print("completed constructing tools list")
     tools_params_dict = construct_tools_params_dict(
-        intent, gene_entities, mutation_entities, cancer_entities,
-        project_mappings, query, gdc_genes_mutations)
-    
-    print('sending request to client for content {}'.format(content))
+        intent,
+        gene_entities,
+        mutation_entities,
+        cancer_entities,
+        project_mappings,
+        query,
+        gdc_genes_mutations,
+    )
+
+    print("sending request to client for content {}".format(content))
     response = client.chat.completions.create(
         model=client.models.list().data[0].id,
         messages=[{"role": "user", "content": content}],
@@ -57,17 +63,17 @@ def execute_api_call(
         tool_choice="auto",
         temperature=0,
         seed=42,
-        n=1
+        n=1,
     )
-    print('received response {}'.format(response))
+    print("received response {}".format(response))
     tool_call = response.choices[0].message.tool_calls[0].function
     print(f"Function called: {tool_call.name}")
     print(f"Arguments: {tool_call.arguments}")
-    
+
     # inspect signature and manually inject args
     sig = inspect.signature(tool_functions_list[tool_call.name])
     arg_names = list(sig.parameters.keys())
-    print('arg_names {}'.format(arg_names))
+    print("arg_names {}".format(arg_names))
     args_dict = {name: tools_params_dict[name] for name in arg_names}
     # override tool call args with args_dict
     tool_call.arguments = json.dumps(args_dict)

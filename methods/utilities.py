@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 import spacy
 import torch
-#from huggingface_hub import HfFolder
+
+# from huggingface_hub import HfFolder
 from transformers import BertTokenizer
 
 # vllm
@@ -31,7 +32,7 @@ def load_llama_llm():
         dtype="half",
         trust_remote_code=True,
         enforce_eager=True,
-        max_model_len=8184
+        max_model_len=8184,
     )
     sampling_params_with_constrained_decoding = SamplingParams(
         n=1,
@@ -498,7 +499,7 @@ def set_hf_token(token_path):
     # hugging face token
     with open(token_path, "r") as hf_token_file:
         HF_TOKEN = hf_token_file.read().strip()
-    #HfFolder.save_token(HF_TOKEN)
+    # HfFolder.save_token(HF_TOKEN)
 
 
 def get_final_columns():
