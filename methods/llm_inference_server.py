@@ -1,4 +1,4 @@
-# start the mcp server with tool calling enabled
+# start the LLM inference server with tool calling enabled
 # run this script from cli
 
 # download tool-calling template

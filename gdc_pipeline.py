@@ -55,7 +55,7 @@ def execute_api_call(
         gdc_genes_mutations,
     )
 
-    print("sending request to client for content {}".format(content))
+    print("sending request  for content {}".format(content))
     response = client.chat.completions.create(
         model=client.models.list().data[0].id,
         messages=[{"role": "user", "content": content}],
