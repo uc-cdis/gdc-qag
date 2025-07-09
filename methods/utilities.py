@@ -2,6 +2,7 @@
 # various utility functions employed by the pipeline
 import json
 import re
+import textwrap
 from functools import reduce
 
 import numpy as np
@@ -26,7 +27,10 @@ def load_llama_llm():
         regex="The final answer is: \d*\.\d*%"
     )
     # add dtype=half if not using A100 (e.g. titan or V100)
-    llm = LLM(model=model_id, dtype="half", trust_remote_code=True, enforce_eager=True)
+    llm = LLM(
+        model=model_id, dtype="half", 
+        trust_remote_code=True, enforce_eager=True, 
+        max_model_len=8184)
     sampling_params_with_constrained_decoding = SamplingParams(
         n=1,
         temperature=0,
@@ -46,7 +50,6 @@ def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
 
 def load_intent_model(intent_model_path):
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    # model = torch.load('/opt/gpudata/aartiv/rag_rig/query_intent_model.pt')
     model = torch.load(intent_model_path)
     return model, tokenizer
 

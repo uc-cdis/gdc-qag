@@ -3,7 +3,6 @@
 
 
 import argparse
-import ast
 
 # import libraries
 import os
@@ -168,11 +167,17 @@ def batch_test(
 
 def setup_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    # add functionality to either pass in a file with questions or a single question
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--input-file",
         dest="input_file",
         help="path to input file with questions. input file should contain one column named questions, with each question on one line",
-        required=True,
+    )
+    group.add_argument(
+        '--question',
+        dest='question',
+        help='a single question string'
     )
     parser.add_argument(
         "--intent-model-path",
@@ -196,7 +201,7 @@ def setup_args():
 
 
 def execute_pipeline(
-    input_file, intent_model_path, path_to_gdc_genes_mutations, hf_token_path
+    df, intent_model_path, path_to_gdc_genes_mutations, hf_token_path, output_file_prefix
 ):
     # load hf token
     print("starting pipeline")
@@ -218,9 +223,8 @@ def execute_pipeline(
     llm, sampling_params = utilities.load_llama_llm()
 
     # queries input file
-    print("running batch test on input queries file {}".format(input_file))
-    llm_eval_dataset = pd.read_csv(input_file)
-    llm_eval_dataset[
+    print("running test on input {}".format(df))
+    df[
         [
             "llama_base_output",
             "helper_output",
@@ -229,7 +233,7 @@ def execute_pipeline(
             "gene_entities",
             "mutation_entities",
         ]
-    ] = llm_eval_dataset["questions"].progress_apply(
+    ] = df["questions"].progress_apply(
         lambda x: batch_test(
             x,
             llm,
@@ -241,49 +245,34 @@ def execute_pipeline(
     )
 
     # get RAG response with helper output
-    llm_eval_dataset["len_helper"] = llm_eval_dataset["helper_output"].apply(
+    df["len_helper"] = df["helper_output"].apply(
         lambda x: len(x)
     )
-    llm_eval_dataset_filtered = llm_eval_dataset[llm_eval_dataset["len_helper"] != 0]
-    llm_eval_dataset_filtered["len_ce"] = llm_eval_dataset_filtered[
+    df_filtered = df[df["len_helper"] != 0]
+    df_filtered["len_ce"] = df_filtered[
         "cancer_entities"
     ].apply(lambda x: len(x))
     # retain rows where one response is retrieved for each cancer entity
-    llm_eval_dataset_filtered["ce_eq_helper"] = llm_eval_dataset_filtered.apply(
+    df_filtered["ce_eq_helper"] = df_filtered.apply(
         lambda x: x["len_ce"] == x["len_helper"], axis=1
     )
-    llm_eval_dataset_filtered = llm_eval_dataset_filtered[
-        llm_eval_dataset_filtered["ce_eq_helper"]
+    df_filtered = df_filtered[
+        df_filtered["ce_eq_helper"]
     ]
 
-    llm_eval_dataset_filtered_exploded = llm_eval_dataset_filtered.explode(
+    df_filtered_exploded = df_filtered.explode(
         ["helper_output", "cancer_entities"], ignore_index=True
     )
-    input_file_prefix = os.path.basename(input_file).split(".")[0]
-    exploded_per_cancer_output = os.path.join(
-        "csvs", input_file_prefix + ".intermediate.csv"
-    )
 
-    print(
-        "writing one response per cancer project to {}".format(
-            exploded_per_cancer_output
-        )
-    )
-    llm_eval_dataset_filtered_exploded.to_csv(exploded_per_cancer_output)
-
-    llm_eval_dataset_filtered_exploded[
+    df_filtered_exploded[
         ["modified_prompt", "pre_final_llama_with_helper_output"]
-    ] = llm_eval_dataset_filtered_exploded.progress_apply(
+    ] = df_filtered_exploded.progress_apply(
         lambda x: utilities.get_prefinal_response(x, llm, sampling_params), axis=1
-    )
-    prefinal_output = os.path.join("csvs", input_file_prefix + ".prefinal.csv")
-    print(
-        "writing prefinal output (without postprocessing) to {}".format(prefinal_output)
     )
 
     ### postprocess response
     print("postprocessing response")
-    llm_eval_dataset_filtered_exploded[
+    df_filtered_exploded[
         [
             "llama_base_stat",
             "delta_llama",
@@ -295,26 +284,49 @@ def execute_pipeline(
             "delta_final",
             "final_response",
         ]
-    ] = llm_eval_dataset_filtered_exploded.progress_apply(
+    ] = df_filtered_exploded.progress_apply(
         lambda x: utilities.postprocess_response(x), axis=1
     )
-    final_output = os.path.join("csvs", input_file_prefix + ".results.csv")
-    print("writing final results to {}".format(final_output))
+
     final_columns = utilities.get_final_columns()
-    llm_eval_dataset_filtered_exploded.to_csv(final_output, columns=final_columns)
+
+    if output_file_prefix:
+        final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
+        print("writing final results to {}".format(final_output))
+        df_filtered_exploded.to_csv(final_output, columns=final_columns)
+    else:
+        print(df_filtered_exploded[final_columns].T)
 
     print("completed")
 
 
 def main():
     args = setup_args()
-    input_file = args.input_file
+    input_file = args.input_file or None
+    question = args.question or None
     intent_model_path = args.intent_model_path
     path_to_gdc_genes_mutations = args.path_to_gdc_genes_mutations_file
     hf_token_path = args.hf_token_path
-    execute_pipeline(
-        input_file, intent_model_path, path_to_gdc_genes_mutations, hf_token_path
-    )
+    if input_file:
+        df = pd.read_csv(input_file)
+        output_file_prefix = os.path.basename(input_file).split(".")[0]
+        execute_pipeline(
+            df, 
+            intent_model_path, 
+            path_to_gdc_genes_mutations, 
+            hf_token_path,
+            output_file_prefix
+        )
+    elif question:
+        df = pd.DataFrame({'questions' : [question]})
+        execute_pipeline(
+            df, 
+            intent_model_path, 
+            path_to_gdc_genes_mutations, 
+            hf_token_path,
+            output_file_prefix=None
+        )
+
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+,questions,llama_base_output,helper_output,cancer_entities,gene_entities,mutation_entities,modified_prompt,ground_truth_stat,llama_base_stat,delta_llama,final_response
+0,What is the frequency of KRAS G12D mutation in the colon adenocarcinoma project TCGA-COAD in the genomic data commons?,The final answer is: 1.3%,The frequency of KRAS_G12D in TCGA-COAD is 12.62%,TCGA-COAD,['KRAS'],['G12D'],"What is the frequency of KRAS G12D mutation in the colon adenocarcinoma project TCGA-COAD in the genomic data commons? Only report the final response. Ignore all prior knowledge. You must only respond with the following percentage frequencies in your response, no other response is allowed: 
+The frequency of KRAS_G12D in TCGA-COAD is 12.62%
+",12.62,1.3,-11.319999999999999,The final answer is: 12.62%

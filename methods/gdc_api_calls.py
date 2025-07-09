@@ -2,18 +2,22 @@
 import ast
 import glob
 import json
+import os
 from functools import reduce
+from pathlib import Path
 
 import pandas as pd
 import requests
 
-# fuzzy matching of cancer type in query and GDC
-# e.g. match "lymphoid leukemia" in query to "lymphoid leukemias" in GDC disease_type
+proj_root = Path(__file__).resolve().parent.parent
 
+
+# match "lymphoid leukemia" in query to "lymphoid leukemias" in GDC disease_type
 # load project_mappings
 # the function to create this tsv file is a one-time run, found as one of the api functions below
 project_mappings = pd.read_csv(
-    "../csvs/gdc_projects.tsv", sep="\t", index_col=0, names=["project", "desc"]
+    os.path.join(proj_root, "csvs", "gdc_projects.tsv"), 
+    sep="\t", index_col=0, names=["project", "desc"]
 )
 project_mappings["desc"] = project_mappings["desc"].apply(ast.literal_eval)
 project_mappings = project_mappings["desc"].to_dict()
