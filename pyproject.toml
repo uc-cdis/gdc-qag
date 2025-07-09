@@ -6,7 +6,7 @@ authors = [
     {name = "aartiv",email = "aartiv@uchicago.edu"}
 ]
 readme = "README.md"
-requires-python = "3.9.2"
+requires-python = "^3.10"
 dependencies = [
     "spacy (==3.7.5)",
     "en-core-sci-md @ https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_md-0.5.4.tar.gz#sha256=7c8fc52542dd1452ffce00b045c1298e2c185b7cf84793f8e0ec941987c09808",
@@ -25,7 +25,8 @@ dependencies = [
     "transformers (==4.49.0)",
     "uvicorn (>=0.35.0,<0.36.0)",
     "uvloop (==0.21.0)",
-    "vllm (==0.7.2)"
+    "vllm (==0.7.2)",
+    "gradio (>=5.35.0,<6.0.0)"
 ]
 package-mode = false
 
