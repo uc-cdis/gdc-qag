@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# GDC-RAG pipeline entry point script
+# QAG pipeline entry point script
 
 
 import argparse
-
-# import libraries
 import os
-from types import SimpleNamespace
-
 import pandas as pd
+import spaces
 from tqdm import tqdm
-
+from types import SimpleNamespace
+from guidance.models import Transformers
+from guidance import gen as guidance_gen
 from methods import gdc_api_calls, utilities
+from transformers import set_seed
 
 tqdm.pandas()
 
@@ -59,13 +59,12 @@ def execute_api_call(
 
 
 # function to combine entities, intent and API call
-def construct_api_call(query, intent_model_path, gdc_genes_mutations, project_mappings):
+def construct_and_execute_api_call(query, intent_model_path, gdc_genes_mutations, project_mappings):
     print("query:\n{}\n".format(query))
     # Infer entities
     initial_cancer_entities = utilities.return_initial_cancer_entities(
         query, model="en_ner_bc5cdr_md"
     )
-    # print('initial cancer entities {}'.format(initial_cancer_entities))
     if not initial_cancer_entities:
         try:
             initial_cancer_entities = utilities.return_initial_cancer_entities(
@@ -122,18 +121,38 @@ def construct_api_call(query, intent_model_path, gdc_genes_mutations, project_ma
     )
 
 
+# generate llama model response
+@spaces.GPU()
+def generate_response(modified_query, model, tok):
+    set_seed(1042)
+    regex="The final answer is: \d*\.\d*%"
+    lm = Transformers(model=model, tokenizer=tok)
+    lm += modified_query
+    lm += guidance_gen(
+        'gen_response',
+        n=1,
+        temperature=0,
+        max_tokens=1000,
+        # to try remove repetition, this is not a param in guidance
+        # repetition_penalty=1.2,
+        regex=regex
+    )
+    return lm['gen_response']
+
+
+
 def batch_test(
     query,
-    llm,
-    sampling_params,
+    model,
+    tok,
     intent_model_path,
     gdc_genes_mutations,
     project_mappings,
 ):
     modified_query = utilities.construct_modified_query_base_llm(query)
-    llama_base_output = llm.generate(modified_query, sampling_params)[0].outputs[0].text
+    llama_base_output = generate_response(modified_query, model, tok)
     try:
-        result = construct_api_call(
+        result = construct_and_execute_api_call(
             query, intent_model_path, gdc_genes_mutations, project_mappings
         )
     except Exception as e:
@@ -191,28 +210,35 @@ def setup_args():
         help="path to dumped genes and mutations info from gdc",
         default="/opt/gpudata/aartiv/qag/gdc_genes_mutations.json",
     )
-    parser.add_argument(
-        "--hf-token-path",
-        dest="hf_token_path",
-        help="path to hugging face token",
-        default="/opt/gpudata/aartiv/qag/huggingface_token.txt",
-    )
     return parser.parse_args()
 
 
+def get_prefinal_response(row, model, tok):
+    try:
+        query = row["questions"]
+        helper_output = row["helper_output"]
+    except Exception as e:
+        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
+    modified_query = utilities.construct_modified_query(query, helper_output)
+    prefinal_llama_with_helper_output = generate_response(modified_query, model, tok)
+    return pd.Series([modified_query, prefinal_llama_with_helper_output])
+
+
+
+
 def execute_pipeline(
-    df, intent_model_path, path_to_gdc_genes_mutations, hf_token_path, output_file_prefix
+    df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix
 ):
-    # load hf token
     print("starting pipeline")
 
+    # from env
     print("loading HF token")
-    utilities.set_hf_token(hf_token_path)
+    AUTH_TOKEN = os.environ.get("HF_TOKEN") or True
+    # utilities.set_hf_token(hf_token_path)
 
     print("getting gdc project information")
     # retrieve and load GDC project mappings
     project_mappings = gdc_api_calls.get_gdc_project_ids(start=0, stop=86)
-    # define models
 
     print("loading gdc genes and mutations")
     gdc_genes_mutations = utilities.load_gdc_genes_mutations(
@@ -220,7 +246,7 @@ def execute_pipeline(
     )
 
     print("loading llama model")
-    llm, sampling_params = utilities.load_llama_llm()
+    model, tok = utilities.load_llama_llm(AUTH_TOKEN)
 
     # queries input file
     print("running test on input {}".format(df))
@@ -236,15 +262,15 @@ def execute_pipeline(
     ] = df["questions"].progress_apply(
         lambda x: batch_test(
             x,
-            llm,
-            sampling_params,
+            model,
+            tok,
             intent_model_path,
             gdc_genes_mutations,
             project_mappings,
         )
     )
 
-    # get RAG response with helper output
+    # retain responses with helper output
     df["len_helper"] = df["helper_output"].apply(
         lambda x: len(x)
     )
@@ -259,15 +285,13 @@ def execute_pipeline(
     df_filtered = df_filtered[
         df_filtered["ce_eq_helper"]
     ]
-
     df_filtered_exploded = df_filtered.explode(
         ["helper_output", "cancer_entities"], ignore_index=True
     )
-
     df_filtered_exploded[
         ["modified_prompt", "pre_final_llama_with_helper_output"]
     ] = df_filtered_exploded.progress_apply(
-        lambda x: utilities.get_prefinal_response(x, llm, sampling_params), axis=1
+        lambda x: get_prefinal_response(x, model, tok), axis=1
     )
 
     ### postprocess response
@@ -306,15 +330,13 @@ def main():
     question = args.question or None
     intent_model_path = args.intent_model_path
     path_to_gdc_genes_mutations = args.path_to_gdc_genes_mutations_file
-    hf_token_path = args.hf_token_path
     if input_file:
         df = pd.read_csv(input_file)
         output_file_prefix = os.path.basename(input_file).split(".")[0]
         execute_pipeline(
             df, 
             intent_model_path, 
-            path_to_gdc_genes_mutations, 
-            hf_token_path,
+            path_to_gdc_genes_mutations,
             output_file_prefix
         )
     elif question:
@@ -323,7 +345,6 @@ def main():
             df, 
             intent_model_path, 
             path_to_gdc_genes_mutations, 
-            hf_token_path,
             output_file_prefix=None
         )
 

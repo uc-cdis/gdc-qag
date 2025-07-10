@@ -2,45 +2,41 @@
 # various utility functions employed by the pipeline
 import json
 import re
-import textwrap
 from functools import reduce
 
 import numpy as np
 import pandas as pd
 import spacy
 import torch
-from huggingface_hub import HfFolder
-from transformers import BertTokenizer
 
-# vllm
-from vllm import LLM, SamplingParams
-from vllm.sampling_params import GuidedDecodingParams
+from guidance.models import Transformers
+from guidance import gen as guidance_gen
+
+from huggingface_hub import HfFolder
+from transformers import AutoTokenizer, BertTokenizer, AutoModelForCausalLM
+
 
 from methods import gdc_api_calls
 
 
-def load_llama_llm():
+def load_llama_llm(AUTH_TOKEN):
     # hugging face model
     # https://huggingface.co/blog/llama32
     model_id = "meta-llama/Llama-3.2-3B-Instruct"
-    guided_decoding_params = GuidedDecodingParams(
-        regex="The final answer is: \d*\.\d*%"
+    tok = AutoTokenizer.from_pretrained(
+        model_id, trust_remote_code=True, 
+        token=AUTH_TOKEN
     )
-    # add dtype=half if not using A100 (e.g. titan or V100)
-    llm = LLM(
-        model=model_id, dtype="half", 
-        trust_remote_code=True, enforce_eager=True, 
-        max_model_len=8184)
-    sampling_params_with_constrained_decoding = SamplingParams(
-        n=1,
-        temperature=0,
-        seed=1042,
-        max_tokens=1000,
-        # to try remove repetition
-        repetition_penalty=1.2,
-        guided_decoding=guided_decoding_params,
+    model = AutoModelForCausalLM.from_pretrained(
+            model_id, 
+            torch_dtype=torch.float16, 
+            trust_remote_code=True,
+            token=AUTH_TOKEN
     )
-    return llm, sampling_params_with_constrained_decoding
+    model = model.to('cuda')
+    model = model.eval()
+
+    return model, tok
 
 
 def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
@@ -470,18 +466,6 @@ def postprocess_response(row):
         ]
     )
 
-
-def get_prefinal_response(row, llm, sampling_params):
-    try:
-        query = row["questions"]
-        helper_output = row["helper_output"]
-    except Exception as e:
-        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
-    modified_query = construct_modified_query(query, helper_output)
-    prefinal_llama_with_helper_output = (
-        llm.generate(modified_query, sampling_params)[0].outputs[0].text
-    )
-    return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
 
 def set_hf_token(token_path):
