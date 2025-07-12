@@ -65,6 +65,7 @@ def construct_and_execute_api_call(query, intent_model_path, gdc_genes_mutations
     initial_cancer_entities = utilities.return_initial_cancer_entities(
         query, model="en_ner_bc5cdr_md"
     )
+    
     if not initial_cancer_entities:
         try:
             initial_cancer_entities = utilities.return_initial_cancer_entities(
@@ -138,7 +139,6 @@ def generate_response(modified_query, model, tok):
         regex=regex
     )
     return lm['gen_response']
-
 
 
 def batch_test(
@@ -224,8 +224,7 @@ def get_prefinal_response(row, model, tok):
     return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
 
-
-
+@utilities.timeit
 def execute_pipeline(
     df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix
 ):

@@ -2,7 +2,8 @@
 # various utility functions employed by the pipeline
 import json
 import re
-from functools import reduce
+import time
+from functools import reduce, wraps
 
 import numpy as np
 import pandas as pd
@@ -492,3 +493,14 @@ def get_final_columns():
         "final_response",
     ]
     return final_columns
+
+
+def timeit(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = fn(*args, **kwargs)
+        end = time.perf_counter()
+        print(f"{fn.__name__} took {end - start:.4f} seconds")
+        return result
+    return wrapper
