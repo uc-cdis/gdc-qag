@@ -4,14 +4,16 @@
 
 import argparse
 import os
+from types import SimpleNamespace
+
 import pandas as pd
 import spaces
-from tqdm import tqdm
-from types import SimpleNamespace
-from guidance.models import Transformers
 from guidance import gen as guidance_gen
-from methods import gdc_api_calls, utilities
+from guidance.models import Transformers
+from tqdm import tqdm
 from transformers import set_seed
+
+from methods import gdc_api_calls, utilities
 
 tqdm.pandas()
 
@@ -59,13 +61,15 @@ def execute_api_call(
 
 
 # function to combine entities, intent and API call
-def construct_and_execute_api_call(query, intent_model_path, gdc_genes_mutations, project_mappings):
+def construct_and_execute_api_call(
+    query, intent_model_path, gdc_genes_mutations, project_mappings
+):
     print("query:\n{}\n".format(query))
     # Infer entities
     initial_cancer_entities = utilities.return_initial_cancer_entities(
         query, model="en_ner_bc5cdr_md"
     )
-    
+
     if not initial_cancer_entities:
         try:
             initial_cancer_entities = utilities.return_initial_cancer_entities(
@@ -126,19 +130,19 @@ def construct_and_execute_api_call(query, intent_model_path, gdc_genes_mutations
 @spaces.GPU()
 def generate_response(modified_query, model, tok):
     set_seed(1042)
-    regex="The final answer is: \d*\.\d*%"
+    regex = "The final answer is: \d*\.\d*%"
     lm = Transformers(model=model, tokenizer=tok)
     lm += modified_query
     lm += guidance_gen(
-        'gen_response',
+        "gen_response",
         n=1,
         temperature=0,
         max_tokens=1000,
         # to try remove repetition, this is not a param in guidance
         # repetition_penalty=1.2,
-        regex=regex
+        regex=regex,
     )
-    return lm['gen_response']
+    return lm["gen_response"]
 
 
 def batch_test(
@@ -193,11 +197,7 @@ def setup_args():
         dest="input_file",
         help="path to input file with questions. input file should contain one column named questions, with each question on one line",
     )
-    group.add_argument(
-        '--question',
-        dest='question',
-        help='a single question string'
-    )
+    group.add_argument("--question", dest="question", help="a single question string")
     parser.add_argument(
         "--intent-model-path",
         dest="intent_model_path",
@@ -270,27 +270,21 @@ def execute_pipeline(
     )
 
     # retain responses with helper output
-    df["len_helper"] = df["helper_output"].apply(
-        lambda x: len(x)
-    )
+    df["len_helper"] = df["helper_output"].apply(lambda x: len(x))
     df_filtered = df[df["len_helper"] != 0]
-    df_filtered["len_ce"] = df_filtered[
-        "cancer_entities"
-    ].apply(lambda x: len(x))
+    df_filtered["len_ce"] = df_filtered["cancer_entities"].apply(lambda x: len(x))
     # retain rows where one response is retrieved for each cancer entity
     df_filtered["ce_eq_helper"] = df_filtered.apply(
         lambda x: x["len_ce"] == x["len_helper"], axis=1
     )
-    df_filtered = df_filtered[
-        df_filtered["ce_eq_helper"]
-    ]
+    df_filtered = df_filtered[df_filtered["ce_eq_helper"]]
     df_filtered_exploded = df_filtered.explode(
         ["helper_output", "cancer_entities"], ignore_index=True
     )
-    df_filtered_exploded[
-        ["modified_prompt", "pre_final_llama_with_helper_output"]
-    ] = df_filtered_exploded.progress_apply(
-        lambda x: get_prefinal_response(x, model, tok), axis=1
+    df_filtered_exploded[["modified_prompt", "pre_final_llama_with_helper_output"]] = (
+        df_filtered_exploded.progress_apply(
+            lambda x: get_prefinal_response(x, model, tok), axis=1
+        )
     )
 
     ### postprocess response
@@ -318,7 +312,7 @@ def execute_pipeline(
         print("writing final results to {}".format(final_output))
         df_filtered_exploded.to_csv(final_output, columns=final_columns)
     else:
-        print(df_filtered_exploded[final_columns].T)
+        result = (df_filtered_exploded[final_columns].T).to_json()
 
     print("completed")
 
@@ -333,20 +327,13 @@ def main():
         df = pd.read_csv(input_file)
         output_file_prefix = os.path.basename(input_file).split(".")[0]
         execute_pipeline(
-            df, 
-            intent_model_path, 
-            path_to_gdc_genes_mutations,
-            output_file_prefix
+            df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix
         )
     elif question:
-        df = pd.DataFrame({'questions' : [question]})
+        df = pd.DataFrame({"questions": [question]})
         execute_pipeline(
-            df, 
-            intent_model_path, 
-            path_to_gdc_genes_mutations, 
-            output_file_prefix=None
+            df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix=None
         )
-
 
 
 if __name__ == "__main__":
