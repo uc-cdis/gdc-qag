@@ -311,9 +311,10 @@ def execute_pipeline(
         final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
         print("writing final results to {}".format(final_output))
         df_filtered_exploded.to_csv(final_output, columns=final_columns)
+        result = df_filtered_exploded
     else:
-        # print(df_filtered_exploded[final_columns].T)
         result = df_filtered_exploded[final_columns].T
+        print('result {}'.format(result))
     print('completed')
     return result
 
