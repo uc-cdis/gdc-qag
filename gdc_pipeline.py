@@ -248,7 +248,7 @@ def execute_pipeline(
     model, tok = utilities.load_llama_llm(AUTH_TOKEN)
 
     # queries input file
-    print("running test on input {}".format(df))
+    print(f"running test on input {df}")
     df[
         [
             "llama_base_output",
@@ -318,9 +318,10 @@ def execute_pipeline(
         print("writing final results to {}".format(final_output))
         df_filtered_exploded.to_csv(final_output, columns=final_columns)
     else:
-        print(df_filtered_exploded[final_columns].T)
-
-    print("completed")
+        # print(df_filtered_exploded[final_columns].T)
+        result = df_filtered_exploded[final_columns].T
+    print('completed')
+    return result
 
 
 def main():
