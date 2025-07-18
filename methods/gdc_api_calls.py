@@ -416,8 +416,9 @@ def get_msi_frequency(cancer_entities):
             for item in response_json["data"]["hits"]:
                 # only score tumors where MSI status is computed for frequency
                 if "msi_status" in item:
-                    # msi_score = item['msi_score']
-                    msi_results.append(item["msi_status"])
+                    # exclude None
+                    if item['msi_status']:
+                        msi_results.append(item["msi_status"])
             freq = msi_results.count("MSI") / len(msi_results)
             msi_h_frequency[ce] = {"frequency": round(freq * 100, 2)}
             result_text.append(
