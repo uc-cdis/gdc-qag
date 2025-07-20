@@ -481,6 +481,7 @@ def get_final_columns():
     # colnames for final output CSV
     final_columns = [
         "questions",
+        "intent",
         "llama_base_output",
         "helper_output",
         "cancer_entities",
