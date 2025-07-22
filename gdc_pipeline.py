@@ -213,12 +213,7 @@ def get_prefinal_response(row, model, tok):
     return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
 
-@utilities.timeit
-def execute_pipeline(
-    df, output_file_prefix
-):
-    print("starting pipeline")
-
+def setup_models_and_data():
     # from env
     print("loading HF token")
     AUTH_TOKEN = os.environ.get("HF_TOKEN") or True
@@ -235,6 +230,23 @@ def execute_pipeline(
 
     print('loading intent model')
     intent_model, intent_tok = utilities.load_intent_model_hf(AUTH_TOKEN)
+    return SimpleNamespace(
+        project_mappings=project_mappings,
+        gdc_genes_mutations=gdc_genes_mutations,
+        model=model,
+        tok=tok,
+        intent_model=intent_model,
+        intent_tok=intent_tok
+    )
+
+
+@utilities.timeit
+def execute_pipeline(
+    df, gdc_genes_mutations, model, 
+    tok, intent_model, intent_tok, 
+    project_mappings, output_file_prefix
+):
+    print("starting pipeline")
 
     # queries input file
     print(f"running test on input {df}")
@@ -313,16 +325,33 @@ def main():
     args = setup_args()
     input_file = args.input_file or None
     question = args.question or None
+
+    qag_requirements = setup_models_and_data()
+
     if input_file:
         df = pd.read_csv(input_file)
         output_file_prefix = os.path.basename(input_file).split(".")[0]
         execute_pipeline(
-            df, output_file_prefix
+            df, 
+            qag_requirements.gdc_genes_mutations,
+            qag_requirements.model,
+            qag_requirements.tok,
+            qag_requirements.intent_model,
+            qag_requirements.intent_tok,
+            qag_requirements.project_mappings,
+            output_file_prefix
         )
     elif question:
         df = pd.DataFrame({"questions": [question]})
         execute_pipeline(
-            df, output_file_prefix=None
+            df, 
+            qag_requirements.gdc_genes_mutations,
+            qag_requirements.model,
+            qag_requirements.tok,
+            qag_requirements.intent_model,
+            qag_requirements.intent_tok,
+            qag_requirements.project_mappings,
+            output_file_prefix=None
         )
 
 
