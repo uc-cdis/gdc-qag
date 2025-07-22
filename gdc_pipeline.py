@@ -199,12 +199,6 @@ def setup_args():
         help="path to input file with questions. input file should contain one column named questions, with each question on one line",
     )
     group.add_argument("--question", dest="question", help="a single question string")
-    parser.add_argument(
-        "--path-to-gdc-genes-mutations-file",
-        dest="path_to_gdc_genes_mutations_file",
-        help="path to dumped genes and mutations info from gdc",
-        default="/opt/gpudata/aartiv/qag/gdc_genes_mutations.json",
-    )
     return parser.parse_args()
 
 
@@ -221,7 +215,7 @@ def get_prefinal_response(row, model, tok):
 
 @utilities.timeit
 def execute_pipeline(
-    df, path_to_gdc_genes_mutations, output_file_prefix
+    df, output_file_prefix
 ):
     print("starting pipeline")
 
@@ -234,9 +228,7 @@ def execute_pipeline(
     project_mappings = gdc_api_calls.get_gdc_project_ids(start=0, stop=86)
 
     print("loading gdc genes and mutations")
-    gdc_genes_mutations = utilities.load_gdc_genes_mutations(
-        path_to_gdc_genes_mutations
-    )
+    gdc_genes_mutations = utilities.load_gdc_genes_mutations_hf(AUTH_TOKEN)
 
     print("loading llama-3B model")
     model, tok = utilities.load_llama_llm(AUTH_TOKEN)
@@ -321,17 +313,16 @@ def main():
     args = setup_args()
     input_file = args.input_file or None
     question = args.question or None
-    path_to_gdc_genes_mutations = args.path_to_gdc_genes_mutations_file
     if input_file:
         df = pd.read_csv(input_file)
         output_file_prefix = os.path.basename(input_file).split(".")[0]
         execute_pipeline(
-            df, path_to_gdc_genes_mutations, output_file_prefix
+            df, output_file_prefix
         )
     elif question:
         df = pd.DataFrame({"questions": [question]})
         execute_pipeline(
-            df, path_to_gdc_genes_mutations, output_file_prefix=None
+            df, output_file_prefix=None
         )
 
 

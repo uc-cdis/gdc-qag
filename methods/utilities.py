@@ -13,7 +13,7 @@ import torch
 from guidance.models import Transformers
 from guidance import gen as guidance_gen
 
-from huggingface_hub import HfFolder
+from huggingface_hub import HfFolder, hf_hub_download
 from transformers import AutoTokenizer, BertTokenizer, AutoModelForCausalLM, BertForSequenceClassification
 
 
@@ -40,8 +40,17 @@ def load_llama_llm(AUTH_TOKEN):
     return model, tok
 
 
-def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
-    gdc_genes_mutations = json.load(open(path_to_gdc_genes_mutations_file))
+def load_gdc_genes_mutations_hf(AUTH_TOKEN):
+    dataset_id = 'uc-ctds/GDC-QAG-genes-mutations'
+    filename = 'gdc_genes_mutations.json'
+    json_path = hf_hub_download(
+        repo_id=dataset_id,
+        filename=filename,
+        repo_type="dataset",
+        token=AUTH_TOKEN
+    )
+    with open(json_path, 'r') as f:
+        gdc_genes_mutations = json.load(f)
     return gdc_genes_mutations
 
 
