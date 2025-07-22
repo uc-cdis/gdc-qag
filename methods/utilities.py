@@ -14,7 +14,7 @@ from guidance.models import Transformers
 from guidance import gen as guidance_gen
 
 from huggingface_hub import HfFolder
-from transformers import AutoTokenizer, BertTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, BertTokenizer, AutoModelForCausalLM, BertForSequenceClassification
 
 
 from methods import gdc_api_calls
@@ -45,14 +45,21 @@ def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
     return gdc_genes_mutations
 
 
-def load_intent_model(intent_model_path):
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = torch.load(intent_model_path)
-    return model, tokenizer
+
+def load_intent_model_hf(AUTH_TOKEN):
+    model_id = 'uc-ctds/query_intent'
+    tok = AutoTokenizer.from_pretrained(
+        model_id, trust_remote_code=True,
+        token=AUTH_TOKEN
+    )
+    model = BertForSequenceClassification.from_pretrained(
+        model_id)
+    return model, tok
 
 
-def infer_user_intent(query, intent_model_path):
-    model, tokenizer = load_intent_model(intent_model_path)
+
+def infer_user_intent(query, intent_model, intent_tok):
+    # model, tokenizer = load_intent_model(intent_model_path)
     intent_labels = {
         "ssm_frequency": 0.0,
         "msi_h_frequency": 1.0,
@@ -62,11 +69,11 @@ def infer_user_intent(query, intent_model_path):
     }
     # set device and load both model and query on the same device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    inputs = tokenizer(query, return_tensors="pt", truncation=True, padding=True)
+    intent_model.to(device)
+    inputs = intent_tok(query, return_tensors="pt", truncation=True, padding=True)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     # pass tokenized input through the model
-    outputs = model(**inputs)
+    outputs = intent_model(**inputs)
     # print('output logits {}'.format(outputs))
     # outputs are logits, need to apply softmax to convert to probs
     probs = torch.nn.functional.softmax(outputs.logits, dim=1)

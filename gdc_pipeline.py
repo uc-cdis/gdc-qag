@@ -62,7 +62,7 @@ def execute_api_call(
 
 # function to combine entities, intent and API call
 def construct_and_execute_api_call(
-    query, intent_model_path, gdc_genes_mutations, project_mappings
+    query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
 ):
     print("query:\n{}\n".format(query))
     # Infer entities
@@ -99,7 +99,7 @@ def construct_and_execute_api_call(
     print("cancer entities {}".format(cancer_entities))
 
     # infer user intent
-    intent = utilities.infer_user_intent(query, intent_model_path)
+    intent = utilities.infer_user_intent(query, intent_model, intent_tok)
     print("user intent:\n{}\n".format(intent))
     try:
         api_call_result, cancer_entities = execute_api_call(
@@ -127,7 +127,7 @@ def construct_and_execute_api_call(
 
 
 # generate llama model response
-@spaces.GPU()
+@spaces.GPU(duration=60)
 def generate_response(modified_query, model, tok):
     set_seed(1042)
     regex = "The final answer is: \d*\.\d*%"
@@ -149,15 +149,16 @@ def batch_test(
     query,
     model,
     tok,
-    intent_model_path,
     gdc_genes_mutations,
     project_mappings,
+    intent_model,
+    intent_tok
 ):
     modified_query = utilities.construct_modified_query_base_llm(query)
     llama_base_output = generate_response(modified_query, model, tok)
     try:
         result = construct_and_execute_api_call(
-            query, intent_model_path, gdc_genes_mutations, project_mappings
+            query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
         )
     except Exception as e:
         # unable to compute at this time, recheck
@@ -199,12 +200,6 @@ def setup_args():
     )
     group.add_argument("--question", dest="question", help="a single question string")
     parser.add_argument(
-        "--intent-model-path",
-        dest="intent_model_path",
-        help="path to trained BERT model for user intent",
-        default="/opt/gpudata/aartiv/qag/query_intent_model.pt",
-    )
-    parser.add_argument(
         "--path-to-gdc-genes-mutations-file",
         dest="path_to_gdc_genes_mutations_file",
         help="path to dumped genes and mutations info from gdc",
@@ -226,14 +221,13 @@ def get_prefinal_response(row, model, tok):
 
 @utilities.timeit
 def execute_pipeline(
-    df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix
+    df, path_to_gdc_genes_mutations, output_file_prefix
 ):
     print("starting pipeline")
 
     # from env
     print("loading HF token")
     AUTH_TOKEN = os.environ.get("HF_TOKEN") or True
-    # utilities.set_hf_token(hf_token_path)
 
     print("getting gdc project information")
     # retrieve and load GDC project mappings
@@ -244,8 +238,11 @@ def execute_pipeline(
         path_to_gdc_genes_mutations
     )
 
-    print("loading llama model")
+    print("loading llama-3B model")
     model, tok = utilities.load_llama_llm(AUTH_TOKEN)
+
+    print('loading intent model')
+    intent_model, intent_tok = utilities.load_intent_model_hf(AUTH_TOKEN)
 
     # queries input file
     print(f"running test on input {df}")
@@ -263,9 +260,10 @@ def execute_pipeline(
             x,
             model,
             tok,
-            intent_model_path,
             gdc_genes_mutations,
             project_mappings,
+            intent_model,
+            intent_tok
         )
     )
 
@@ -323,18 +321,17 @@ def main():
     args = setup_args()
     input_file = args.input_file or None
     question = args.question or None
-    intent_model_path = args.intent_model_path
     path_to_gdc_genes_mutations = args.path_to_gdc_genes_mutations_file
     if input_file:
         df = pd.read_csv(input_file)
         output_file_prefix = os.path.basename(input_file).split(".")[0]
         execute_pipeline(
-            df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix
+            df, path_to_gdc_genes_mutations, output_file_prefix
         )
     elif question:
         df = pd.DataFrame({"questions": [question]})
         execute_pipeline(
-            df, intent_model_path, path_to_gdc_genes_mutations, output_file_prefix=None
+            df, path_to_gdc_genes_mutations, output_file_prefix=None
         )
 
 
