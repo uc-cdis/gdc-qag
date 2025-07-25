@@ -10,11 +10,9 @@ import pandas as pd
 import spacy
 import torch
 
-from guidance.models import Transformers
-from guidance import gen as guidance_gen
 
 from huggingface_hub import HfFolder, hf_hub_download
-from transformers import AutoTokenizer, BertTokenizer, AutoModelForCausalLM, BertForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForCausalLM, BertForSequenceClassification
 
 
 from methods import gdc_api_calls
@@ -497,17 +495,17 @@ def get_final_columns():
     # colnames for final output CSV
     final_columns = [
         "questions",
-        "intent",
-        "llama_base_output",
-        "helper_output",
-        "cancer_entities",
         "gene_entities",
         "mutation_entities",
-        "modified_prompt",
-        "ground_truth_stat",
+        "cancer_entities",
+        "intent",
+        "llama_base_output",
         "llama_base_stat",
-        "delta_llama",
+        "helper_output",
+        "ground_truth_stat",
+        "modified_prompt",
         "final_response",
+        "delta_llama"
     ]
     return final_columns
 

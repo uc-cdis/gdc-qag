@@ -5,14 +5,13 @@
 import argparse
 import os
 from types import SimpleNamespace
-
+import json
 import pandas as pd
 import spaces
 from guidance import gen as guidance_gen
 from guidance.models import Transformers
 from tqdm import tqdm
 from transformers import set_seed
-
 from methods import gdc_api_calls, utilities
 
 tqdm.pandas()
@@ -240,6 +239,7 @@ def setup_models_and_data():
     )
 
 
+
 @utilities.timeit
 def execute_pipeline(
     df, gdc_genes_mutations, model, 
@@ -313,12 +313,13 @@ def execute_pipeline(
         final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
         print("writing final results to {}".format(final_output))
         df_filtered_exploded.to_csv(final_output, columns=final_columns)
-        result = df_filtered_exploded
+        result = df_filtered_exploded[final_columns]
     else:
-        result = df_filtered_exploded[final_columns].T
-        print('result {}'.format(result))
+        result = df_filtered_exploded[final_columns]
+        print(json.dumps(result.T.to_dict(), indent=2))
     print('completed')
     return result
+
 
 
 def main():
