@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-# requirements
 # testing batch API from https://github.com/openai/openai-cookbook/blob/main/examples/batch_processing.ipynb
 # pip install openai --upgrade
 # pip install python-dotenv
+# note: use this code only for small scale tests
+# for larger files, convert to jsonl and upload to batch API
+# see notebook in notebooks for an example
 
 import json
 import os
@@ -73,9 +75,6 @@ def main():
     print("openai client initialized")
     # check model availability
     print(client.models.list())
-
-    # gpt4 is expensive
-    # from prev tests: for 4k questions already $20
 
     eval_dataset = pd.read_csv("csvs/questions.csv")
     # eval_dataset = eval_dataset.head(n=2)

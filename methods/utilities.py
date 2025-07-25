@@ -2,57 +2,71 @@
 # various utility functions employed by the pipeline
 import json
 import re
-from functools import reduce
+import time
+from functools import reduce, wraps
 
 import numpy as np
 import pandas as pd
 import spacy
 import torch
-from huggingface_hub import HfFolder
-from transformers import BertTokenizer
 
-# vllm
-from vllm import LLM, SamplingParams
-from vllm.sampling_params import GuidedDecodingParams
+
+from huggingface_hub import HfFolder, hf_hub_download
+from transformers import AutoTokenizer, AutoModelForCausalLM, BertForSequenceClassification
+
 
 from methods import gdc_api_calls
 
 
-def load_llama_llm():
+def load_llama_llm(AUTH_TOKEN):
     # hugging face model
     # https://huggingface.co/blog/llama32
     model_id = "meta-llama/Llama-3.2-3B-Instruct"
-    guided_decoding_params = GuidedDecodingParams(
-        regex="The final answer is: \d*\.\d*%"
+    tok = AutoTokenizer.from_pretrained(
+        model_id, trust_remote_code=True, 
+        token=AUTH_TOKEN
     )
-    # add dtype=half if not using A100 (e.g. titan or V100)
-    llm = LLM(model=model_id, dtype="half", trust_remote_code=True, enforce_eager=True)
-    sampling_params_with_constrained_decoding = SamplingParams(
-        n=1,
-        temperature=0,
-        seed=1042,
-        max_tokens=1000,
-        # to try remove repetition
-        repetition_penalty=1.2,
-        guided_decoding=guided_decoding_params,
+    model = AutoModelForCausalLM.from_pretrained(
+            model_id, 
+            torch_dtype=torch.float16, 
+            trust_remote_code=True,
+            token=AUTH_TOKEN
     )
-    return llm, sampling_params_with_constrained_decoding
+    model = model.to('cuda')
+    model = model.eval()
+
+    return model, tok
 
 
-def load_gdc_genes_mutations(path_to_gdc_genes_mutations_file):
-    gdc_genes_mutations = json.load(open(path_to_gdc_genes_mutations_file))
+def load_gdc_genes_mutations_hf(AUTH_TOKEN):
+    dataset_id = 'uc-ctds/GDC-QAG-genes-mutations'
+    filename = 'gdc_genes_mutations.json'
+    json_path = hf_hub_download(
+        repo_id=dataset_id,
+        filename=filename,
+        repo_type="dataset",
+        token=AUTH_TOKEN
+    )
+    with open(json_path, 'r') as f:
+        gdc_genes_mutations = json.load(f)
     return gdc_genes_mutations
 
 
-def load_intent_model(intent_model_path):
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    # model = torch.load('/opt/gpudata/aartiv/rag_rig/query_intent_model.pt')
-    model = torch.load(intent_model_path)
-    return model, tokenizer
+
+def load_intent_model_hf(AUTH_TOKEN):
+    model_id = 'uc-ctds/query_intent'
+    tok = AutoTokenizer.from_pretrained(
+        model_id, trust_remote_code=True,
+        token=AUTH_TOKEN
+    )
+    model = BertForSequenceClassification.from_pretrained(
+        model_id)
+    return model, tok
 
 
-def infer_user_intent(query, intent_model_path):
-    model, tokenizer = load_intent_model(intent_model_path)
+
+def infer_user_intent(query, intent_model, intent_tok):
+    # model, tokenizer = load_intent_model(intent_model_path)
     intent_labels = {
         "ssm_frequency": 0.0,
         "msi_h_frequency": 1.0,
@@ -62,11 +76,11 @@ def infer_user_intent(query, intent_model_path):
     }
     # set device and load both model and query on the same device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    inputs = tokenizer(query, return_tensors="pt", truncation=True, padding=True)
+    intent_model.to(device)
+    inputs = intent_tok(query, return_tensors="pt", truncation=True, padding=True)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     # pass tokenized input through the model
-    outputs = model(**inputs)
+    outputs = intent_model(**inputs)
     # print('output logits {}'.format(outputs))
     # outputs are logits, need to apply softmax to convert to probs
     probs = torch.nn.functional.softmax(outputs.logits, dim=1)
@@ -468,18 +482,6 @@ def postprocess_response(row):
     )
 
 
-def get_prefinal_response(row, llm, sampling_params):
-    try:
-        query = row["questions"]
-        helper_output = row["helper_output"]
-    except Exception as e:
-        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
-    modified_query = construct_modified_query(query, helper_output)
-    prefinal_llama_with_helper_output = (
-        llm.generate(modified_query, sampling_params)[0].outputs[0].text
-    )
-    return pd.Series([modified_query, prefinal_llama_with_helper_output])
-
 
 def set_hf_token(token_path):
     # hugging face token
@@ -493,15 +495,27 @@ def get_final_columns():
     # colnames for final output CSV
     final_columns = [
         "questions",
-        "llama_base_output",
-        "helper_output",
-        "cancer_entities",
         "gene_entities",
         "mutation_entities",
-        "modified_prompt",
-        "ground_truth_stat",
+        "cancer_entities",
+        "intent",
+        "llama_base_output",
         "llama_base_stat",
-        "delta_llama",
+        "helper_output",
+        "ground_truth_stat",
+        "modified_prompt",
         "final_response",
+        "delta_llama"
     ]
     return final_columns
+
+
+def timeit(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = fn(*args, **kwargs)
+        end = time.perf_counter()
+        print(f"{fn.__name__} took {end - start:.4f} seconds")
+        return result
+    return wrapper
