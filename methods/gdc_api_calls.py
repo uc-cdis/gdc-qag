@@ -123,7 +123,6 @@ def get_ssm_counts(ssm_id, cancer_entities):
     ssm_counts_by_project = {}
 
     for ce in cancer_entities:
-
         ssm_occurrences_endpt = "https://api.gdc.cancer.gov/ssm_occurrences"
         fields = ["case.project.project_id", "case.case_id"]
         fields = ",".join(fields)

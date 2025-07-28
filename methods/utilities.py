@@ -124,6 +124,12 @@ def calculate_ssm_frequency(ssm_statistics, cancer_entities, project_mappings):
             / ssm_statistics[project]["total_case_counts"]
         )
         ssm_frequency[project] = {"frequency": round(freq * 100, 2)}
+    
+    # if there are no ssms, set to 0 counts
+    for c in cancer_entities:
+        if c not in ssm_frequency:
+            ssm_frequency[c] = {'frequency': 0.0}
+
     return ssm_frequency
 
 
