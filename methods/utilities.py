@@ -117,22 +117,13 @@ def get_total_case_counts(ssm_counts_by_project):
 
 
 def calculate_ssm_frequency(ssm_statistics, cancer_entities, project_mappings):
-    if not cancer_entities:
-        cancer_entities = list(project_mappings.keys())
-    pre_final_ssm_frequency = {}
     ssm_frequency = {}
     for project in ssm_statistics.keys():
         freq = (
             ssm_statistics[project]["ssm_counts"]
             / ssm_statistics[project]["total_case_counts"]
         )
-        pre_final_ssm_frequency[project] = {"frequency": round(freq * 100, 2)}
-
-    for c in cancer_entities:
-        if c in pre_final_ssm_frequency:
-            ssm_frequency[c] = pre_final_ssm_frequency[c]
-        else:
-            ssm_frequency[c] = {"frequency": 0.0}
+        ssm_frequency[project] = {"frequency": round(freq * 100, 2)}
     return ssm_frequency
 
 
@@ -215,38 +206,28 @@ def get_ssm_frequency(
         # print('computing frequency of {}'.format(mutation_name))
         mutation_list.append(mutation_name)
         ssm_id = gdc_api_calls.get_ssm_id(gene, mutation)
-        ssm_counts_by_project = gdc_api_calls.get_ssm_counts(ssm_id)
+        ssm_counts_by_project = gdc_api_calls.get_ssm_counts(ssm_id, cancer_entities)
         ssm_statistics[mutation_name] = get_total_case_counts(ssm_counts_by_project)
-        # full_result for all cancer entities
         # test code for generalizability to multiple cancer entities
         # full_result format is {'project1': {'frequency': }, 'project2': {'frequency':}, 'projectn': {'frequency':}}
-        full_result = calculate_ssm_frequency(
+        result[mutation_name] = calculate_ssm_frequency(
             ssm_statistics[mutation_name], cancer_entities, project_mappings
         )
+        # result[mutation_name] = {
+        #    k: v for k, v in full_result.items()
+        #}
         # result format:
         """
-    { 
-      'gene_mutation': # e.g. JAK2_V617F
-      {
-        'project1': {'frequency': }, 
-        'project2': {'frequency':}, 
-        'projectn': {'frequency':}
-      }
-    }
-    'project1': {'frequency': }, 'project2': {'frequency':}
-    """
-        result[mutation_name] = {
-            k: v for k, v in full_result.items() if k in cancer_entities
+        { 
+        'gene_mutation': # e.g. JAK2_V617F
+        {
+            'project1': {'frequency': }, 
+            'project2': {'frequency':}, 
+            'projectn': {'frequency':}
         }
-        # if no entity match to specific gdc projects, return all
-        if not result[mutation_name].values():
-            result[mutation_name] = full_result
-    # print('API result ssm freq {}'.format(result))
-    # final cancer entities
-    for k, v in result.items():
-        cancer_entities = list(v.keys())
-    # print('ssm freq cancer entities {}'.format(cancer_entities))
-    # print('mutation list {}'.format(mutation_list))
+        }
+        'project1': {'frequency': }, 'project2': {'frequency':}
+        """
     # only supporting for two mutations atm
     if len(mutation_list) > 1:
         # print('computing joint frequency')
