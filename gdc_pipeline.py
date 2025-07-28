@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# GDC-RAG pipeline entry point script
+# QAG pipeline entry point script
 
 
 import argparse
-import ast
-
-# import libraries
 import os
 from types import SimpleNamespace
-
+import json
 import pandas as pd
+import spaces
+from guidance import gen as guidance_gen
+from guidance.models import Transformers
 from tqdm import tqdm
-
+from transformers import set_seed
 from methods import gdc_api_calls, utilities
 
 tqdm.pandas()
@@ -60,13 +60,15 @@ def execute_api_call(
 
 
 # function to combine entities, intent and API call
-def construct_api_call(query, intent_model_path, gdc_genes_mutations, project_mappings):
+def construct_and_execute_api_call(
+    query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
+):
     print("query:\n{}\n".format(query))
     # Infer entities
     initial_cancer_entities = utilities.return_initial_cancer_entities(
         query, model="en_ner_bc5cdr_md"
     )
-    # print('initial cancer entities {}'.format(initial_cancer_entities))
+
     if not initial_cancer_entities:
         try:
             initial_cancer_entities = utilities.return_initial_cancer_entities(
@@ -96,7 +98,7 @@ def construct_api_call(query, intent_model_path, gdc_genes_mutations, project_ma
     print("cancer entities {}".format(cancer_entities))
 
     # infer user intent
-    intent = utilities.infer_user_intent(query, intent_model_path)
+    intent = utilities.infer_user_intent(query, intent_model, intent_tok)
     print("user intent:\n{}\n".format(intent))
     try:
         api_call_result, cancer_entities = execute_api_call(
@@ -123,19 +125,39 @@ def construct_api_call(query, intent_model_path, gdc_genes_mutations, project_ma
     )
 
 
+# generate llama model response
+@spaces.GPU(duration=60)
+def generate_response(modified_query, model, tok):
+    set_seed(1042)
+    regex = "The final answer is: \d*\.\d*%"
+    lm = Transformers(model=model, tokenizer=tok)
+    lm += modified_query
+    lm += guidance_gen(
+        "gen_response",
+        n=1,
+        temperature=0,
+        max_tokens=1000,
+        # to try remove repetition, this is not a param in guidance
+        # repetition_penalty=1.2,
+        regex=regex,
+    )
+    return lm["gen_response"]
+
+
 def batch_test(
     query,
-    llm,
-    sampling_params,
-    intent_model_path,
+    model,
+    tok,
     gdc_genes_mutations,
     project_mappings,
+    intent_model,
+    intent_tok
 ):
     modified_query = utilities.construct_modified_query_base_llm(query)
-    llama_base_output = llm.generate(modified_query, sampling_params)[0].outputs[0].text
+    llama_base_output = generate_response(modified_query, model, tok)
     try:
-        result = construct_api_call(
-            query, intent_model_path, gdc_genes_mutations, project_mappings
+        result = construct_and_execute_api_call(
+            query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
         )
     except Exception as e:
         # unable to compute at this time, recheck
@@ -168,59 +190,67 @@ def batch_test(
 
 def setup_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    # add functionality to either pass in a file with questions or a single question
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--input-file",
         dest="input_file",
         help="path to input file with questions. input file should contain one column named questions, with each question on one line",
-        required=True,
     )
-    parser.add_argument(
-        "--intent-model-path",
-        dest="intent_model_path",
-        help="path to trained BERT model for user intent",
-        default="/opt/gpudata/aartiv/qag/query_intent_model.pt",
-    )
-    parser.add_argument(
-        "--path-to-gdc-genes-mutations-file",
-        dest="path_to_gdc_genes_mutations_file",
-        help="path to dumped genes and mutations info from gdc",
-        default="/opt/gpudata/aartiv/qag/gdc_genes_mutations.json",
-    )
-    parser.add_argument(
-        "--hf-token-path",
-        dest="hf_token_path",
-        help="path to hugging face token",
-        default="/opt/gpudata/aartiv/qag/huggingface_token.txt",
-    )
+    group.add_argument("--question", dest="question", help="a single question string")
     return parser.parse_args()
 
 
-def execute_pipeline(
-    input_file, intent_model_path, path_to_gdc_genes_mutations, hf_token_path
-):
-    # load hf token
-    print("starting pipeline")
+def get_prefinal_response(row, model, tok):
+    try:
+        query = row["questions"]
+        helper_output = row["helper_output"]
+    except Exception as e:
+        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
+    modified_query = utilities.construct_modified_query(query, helper_output)
+    prefinal_llama_with_helper_output = generate_response(modified_query, model, tok)
+    return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
+
+def setup_models_and_data():
+    # from env
     print("loading HF token")
-    utilities.set_hf_token(hf_token_path)
+    AUTH_TOKEN = os.environ.get("HF_TOKEN") or True
 
     print("getting gdc project information")
     # retrieve and load GDC project mappings
     project_mappings = gdc_api_calls.get_gdc_project_ids(start=0, stop=86)
-    # define models
 
     print("loading gdc genes and mutations")
-    gdc_genes_mutations = utilities.load_gdc_genes_mutations(
-        path_to_gdc_genes_mutations
+    gdc_genes_mutations = utilities.load_gdc_genes_mutations_hf(AUTH_TOKEN)
+
+    print("loading llama-3B model")
+    model, tok = utilities.load_llama_llm(AUTH_TOKEN)
+
+    print('loading intent model')
+    intent_model, intent_tok = utilities.load_intent_model_hf(AUTH_TOKEN)
+    return SimpleNamespace(
+        project_mappings=project_mappings,
+        gdc_genes_mutations=gdc_genes_mutations,
+        model=model,
+        tok=tok,
+        intent_model=intent_model,
+        intent_tok=intent_tok
     )
 
-    print("loading llama model")
-    llm, sampling_params = utilities.load_llama_llm()
+
+
+@utilities.timeit
+def execute_pipeline(
+    df, gdc_genes_mutations, model, 
+    tok, intent_model, intent_tok, 
+    project_mappings, output_file_prefix
+):
+    print("starting pipeline")
 
     # queries input file
-    print("running batch test on input queries file {}".format(input_file))
-    llm_eval_dataset = pd.read_csv(input_file)
-    llm_eval_dataset[
+    print(f"running test on input {df}")
+    df[
         [
             "llama_base_output",
             "helper_output",
@@ -229,61 +259,39 @@ def execute_pipeline(
             "gene_entities",
             "mutation_entities",
         ]
-    ] = llm_eval_dataset["questions"].progress_apply(
+    ] = df["questions"].progress_apply(
         lambda x: batch_test(
             x,
-            llm,
-            sampling_params,
-            intent_model_path,
+            model,
+            tok,
             gdc_genes_mutations,
             project_mappings,
+            intent_model,
+            intent_tok
         )
     )
 
-    # get RAG response with helper output
-    llm_eval_dataset["len_helper"] = llm_eval_dataset["helper_output"].apply(
-        lambda x: len(x)
-    )
-    llm_eval_dataset_filtered = llm_eval_dataset[llm_eval_dataset["len_helper"] != 0]
-    llm_eval_dataset_filtered["len_ce"] = llm_eval_dataset_filtered[
-        "cancer_entities"
-    ].apply(lambda x: len(x))
+    # retain responses with helper output
+    df["len_helper"] = df["helper_output"].apply(lambda x: len(x))
+    df_filtered = df[df["len_helper"] != 0]
+    df_filtered["len_ce"] = df_filtered["cancer_entities"].apply(lambda x: len(x))
     # retain rows where one response is retrieved for each cancer entity
-    llm_eval_dataset_filtered["ce_eq_helper"] = llm_eval_dataset_filtered.apply(
+    df_filtered["ce_eq_helper"] = df_filtered.apply(
         lambda x: x["len_ce"] == x["len_helper"], axis=1
     )
-    llm_eval_dataset_filtered = llm_eval_dataset_filtered[
-        llm_eval_dataset_filtered["ce_eq_helper"]
-    ]
-
-    llm_eval_dataset_filtered_exploded = llm_eval_dataset_filtered.explode(
+    df_filtered = df_filtered[df_filtered["ce_eq_helper"]]
+    df_filtered_exploded = df_filtered.explode(
         ["helper_output", "cancer_entities"], ignore_index=True
     )
-    input_file_prefix = os.path.basename(input_file).split(".")[0]
-    exploded_per_cancer_output = os.path.join(
-        "csvs", input_file_prefix + ".intermediate.csv"
-    )
-
-    print(
-        "writing one response per cancer project to {}".format(
-            exploded_per_cancer_output
+    df_filtered_exploded[["modified_prompt", "pre_final_llama_with_helper_output"]] = (
+        df_filtered_exploded.progress_apply(
+            lambda x: get_prefinal_response(x, model, tok), axis=1
         )
-    )
-    llm_eval_dataset_filtered_exploded.to_csv(exploded_per_cancer_output)
-
-    llm_eval_dataset_filtered_exploded[
-        ["modified_prompt", "pre_final_llama_with_helper_output"]
-    ] = llm_eval_dataset_filtered_exploded.progress_apply(
-        lambda x: utilities.get_prefinal_response(x, llm, sampling_params), axis=1
-    )
-    prefinal_output = os.path.join("csvs", input_file_prefix + ".prefinal.csv")
-    print(
-        "writing prefinal output (without postprocessing) to {}".format(prefinal_output)
     )
 
     ### postprocess response
     print("postprocessing response")
-    llm_eval_dataset_filtered_exploded[
+    df_filtered_exploded[
         [
             "llama_base_stat",
             "delta_llama",
@@ -295,26 +303,57 @@ def execute_pipeline(
             "delta_final",
             "final_response",
         ]
-    ] = llm_eval_dataset_filtered_exploded.progress_apply(
+    ] = df_filtered_exploded.progress_apply(
         lambda x: utilities.postprocess_response(x), axis=1
     )
-    final_output = os.path.join("csvs", input_file_prefix + ".results.csv")
-    print("writing final results to {}".format(final_output))
-    final_columns = utilities.get_final_columns()
-    llm_eval_dataset_filtered_exploded.to_csv(final_output, columns=final_columns)
 
-    print("completed")
+    final_columns = utilities.get_final_columns()
+
+    if output_file_prefix:
+        final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
+        print("writing final results to {}".format(final_output))
+        df_filtered_exploded.to_csv(final_output, columns=final_columns)
+        result = df_filtered_exploded[final_columns]
+    else:
+        result = df_filtered_exploded[final_columns]
+        print(json.dumps(result.T.to_dict(), indent=2))
+    print('completed')
+    return result
+
 
 
 def main():
     args = setup_args()
-    input_file = args.input_file
-    intent_model_path = args.intent_model_path
-    path_to_gdc_genes_mutations = args.path_to_gdc_genes_mutations_file
-    hf_token_path = args.hf_token_path
-    execute_pipeline(
-        input_file, intent_model_path, path_to_gdc_genes_mutations, hf_token_path
-    )
+    input_file = args.input_file or None
+    question = args.question or None
+
+    qag_requirements = setup_models_and_data()
+
+    if input_file:
+        df = pd.read_csv(input_file)
+        output_file_prefix = os.path.basename(input_file).split(".")[0]
+        execute_pipeline(
+            df, 
+            qag_requirements.gdc_genes_mutations,
+            qag_requirements.model,
+            qag_requirements.tok,
+            qag_requirements.intent_model,
+            qag_requirements.intent_tok,
+            qag_requirements.project_mappings,
+            output_file_prefix
+        )
+    elif question:
+        df = pd.DataFrame({"questions": [question]})
+        execute_pipeline(
+            df, 
+            qag_requirements.gdc_genes_mutations,
+            qag_requirements.model,
+            qag_requirements.tok,
+            qag_requirements.intent_model,
+            qag_requirements.intent_tok,
+            qag_requirements.project_mappings,
+            output_file_prefix=None
+        )
 
 
 if __name__ == "__main__":

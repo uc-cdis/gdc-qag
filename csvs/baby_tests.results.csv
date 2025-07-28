@@ -1,0 +1,4 @@
+,questions,intent,llama_base_output,helper_output,cancer_entities,gene_entities,mutation_entities,modified_prompt,ground_truth_stat,llama_base_stat,delta_llama,final_response
+0,What is the co-occurence frequency of somatic homozygous deletions in CDKN2A and CDKN2B in the mesothelioma project TCGA-MESO in the genomic data commons?,freq_cnv_loss_or_gain,The final answer is: 0.0%,joint frequency in TCGA-MESO is 44.83%,TCGA-MESO,"['CDKN2A', 'CDKN2B']",[],"What is the co-occurence frequency of somatic homozygous deletions in CDKN2A and CDKN2B in the mesothelioma project TCGA-MESO in the genomic data commons? Only report the final response. Ignore all prior knowledge. You must only respond with the following percentage frequencies in your response, no other response is allowed: 
+joint frequency in TCGA-MESO is 44.83%
+",44.83,0.0,-44.83,The final answer is: 44.83%
