@@ -118,34 +118,47 @@ def get_ssm_id(gene, mutation):
     return ssm_id
 
 
-def get_ssm_counts(ssm_id):
+def get_ssm_counts(ssm_id, cancer_entities):
     # get project level counts of ssm
     ssm_counts_by_project = {}
 
-    ssm_occurrences_endpt = "https://api.gdc.cancer.gov/ssm_occurrences"
-    fields = ["case.project.project_id", "case.case_id"]
-    fields = ",".join(fields)
-    filters = {"op": "=", "content": {"field": "ssm.ssm_id", "value": ssm_id}}
-    params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
-    try:
-        response = requests.get(ssm_occurrences_endpt, params=params)
-        ssm_counts = json.loads(response.content)
-        for item in ssm_counts["data"]["hits"]:
-            project_name = item["case"]["project"]["project_id"]
-            case_id_list = "case_id_list"
-            if not project_name in ssm_counts_by_project:
-                ssm_counts_by_project[project_name] = {}
-                ssm_counts_by_project[project_name][case_id_list] = []
-            ssm_counts_by_project[project_name][case_id_list].append(
-                item["case"]["case_id"]
-            )
-            ssm_counts_by_project[project_name]["ssm_counts"] = (
-                ssm_counts_by_project[project_name]["ssm_counts"] + 1
-                if "ssm_counts" in ssm_counts_by_project[project_name]
-                else 1
-            )
-    except Exception as e:
-        print("unable to execute GDC API request {}".format(str(e)))
+    for ce in cancer_entities:
+
+        ssm_occurrences_endpt = "https://api.gdc.cancer.gov/ssm_occurrences"
+        fields = ["case.project.project_id", "case.case_id"]
+        fields = ",".join(fields)
+        filters = {
+            "op": "and", 
+            "content": [
+                {   
+                    "op": '=',
+                    "content": {"field": "ssm.ssm_id", "value": ssm_id}
+                },
+                {
+                    "op": "=", 
+                    "content": {"field": "case.project.project_id", "value": ce}
+                },
+            ]}
+        params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
+        try:
+            response = requests.get(ssm_occurrences_endpt, params=params)
+            ssm_counts = json.loads(response.content)
+            for item in ssm_counts["data"]["hits"]:
+                project_name = item["case"]["project"]["project_id"]
+                case_id_list = "case_id_list"
+                if not project_name in ssm_counts_by_project:
+                    ssm_counts_by_project[project_name] = {}
+                    ssm_counts_by_project[project_name][case_id_list] = []
+                ssm_counts_by_project[project_name][case_id_list].append(
+                    item["case"]["case_id"]
+                )
+                ssm_counts_by_project[project_name]["ssm_counts"] = (
+                    ssm_counts_by_project[project_name]["ssm_counts"] + 1
+                    if "ssm_counts" in ssm_counts_by_project[project_name]
+                    else 1
+                )
+        except Exception as e:
+            print("unable to execute GDC API request {}".format(str(e)))
     return ssm_counts_by_project
 
 
