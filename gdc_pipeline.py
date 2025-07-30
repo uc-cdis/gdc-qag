@@ -272,26 +272,17 @@ def execute_pipeline(
     )
 
     # retain responses with helper output
-    df["len_helper"] = df["helper_output"].apply(lambda x: len(x))
-    df_filtered = df[df["len_helper"] != 0]
-    df_filtered["len_ce"] = df_filtered["cancer_entities"].apply(lambda x: len(x))
-    # retain rows where one response is retrieved for each cancer entity
-    df_filtered["ce_eq_helper"] = df_filtered.apply(
-        lambda x: x["len_ce"] == x["len_helper"], axis=1
-    )
-    df_filtered = df_filtered[df_filtered["ce_eq_helper"]]
-    df_filtered_exploded = df_filtered.explode(
-        ["helper_output", "cancer_entities"], ignore_index=True
-    )
-    df_filtered_exploded[["modified_prompt", "pre_final_llama_with_helper_output"]] = (
-        df_filtered_exploded.progress_apply(
+
+    df_exploded = df.explode('helper_output', ignore_index=True)
+    df_exploded[["modified_prompt", "pre_final_llama_with_helper_output"]] = (
+        df_exploded.progress_apply(
             lambda x: get_prefinal_response(x, model, tok), axis=1
         )
     )
 
     ### postprocess response
     print("postprocessing response")
-    df_filtered_exploded[
+    df_exploded[
         [
             "llama_base_stat",
             "delta_llama",
@@ -303,7 +294,7 @@ def execute_pipeline(
             "delta_final",
             "final_response",
         ]
-    ] = df_filtered_exploded.progress_apply(
+    ] = df_exploded.progress_apply(
         lambda x: utilities.postprocess_response(x), axis=1
     )
 
@@ -312,10 +303,10 @@ def execute_pipeline(
     if output_file_prefix:
         final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
         print("writing final results to {}".format(final_output))
-        df_filtered_exploded.to_csv(final_output, columns=final_columns)
-        result = df_filtered_exploded[final_columns]
+        df_exploded.to_csv(final_output, columns=final_columns)
+        result = df_exploded[final_columns]
     else:
-        result = df_filtered_exploded[final_columns]
+        result = df_exploded[final_columns]
         print(json.dumps(result.T.to_dict(), indent=2))
     print('completed')
     return result

@@ -109,6 +109,7 @@ def construct_modified_query(query, helper_output):
     return modified_query
 
 
+
 def get_total_case_counts(ssm_counts_by_project):
     for project in ssm_counts_by_project.keys():
         total_case_count = gdc_api_calls.get_available_ssm_data_for_project(project)
@@ -124,6 +125,12 @@ def calculate_ssm_frequency(ssm_statistics, cancer_entities, project_mappings):
             / ssm_statistics[project]["total_case_counts"]
         )
         ssm_frequency[project] = {"frequency": round(freq * 100, 2)}
+    
+    # if there are no ssms, set to 0 counts
+    for c in cancer_entities:
+        if c not in ssm_frequency:
+            ssm_frequency[c] = {'frequency': 0.0}
+
     return ssm_frequency
 
 
@@ -148,7 +155,6 @@ def calculate_joint_ssm_frequency_v2(ssm_statistics, mutation_list, cancer_entit
             for mutation in mutation_list
         ]
         shared_cases = list(reduce(lambda x, y: x & y, cases_with_mutation))
-        # print('shared cases, len shared cases {} {}'.format(shared_cases, len(shared_cases)))
         if shared_cases:
             if project not in joint_ssm_frequency:
                 joint_ssm_frequency[project] = {}
@@ -156,8 +162,6 @@ def calculate_joint_ssm_frequency_v2(ssm_statistics, mutation_list, cancer_entit
                 project
             )
             joint_frequency = len(shared_cases) / total_case_counts
-            # print('shared_cases {}'.format(shared_cases))
-            # print('joint freq {}'.format(joint_frequency))
             joint_ssm_frequency[project]["joint_frequency"] = round(
                 joint_frequency * 100, 2
             )
@@ -199,8 +203,7 @@ def get_ssm_frequency(
     result = {}
     # to match the genes with mutations
     if len(mutation_entities) > len(gene_entities):
-        gene_entities = gene_entities * len(mutation_entities)
-    # print('gene entities {}'.format(gene_entities))
+        gene_entities = gene_entities * len(mutation_entities) 
     for gene, mutation in zip(gene_entities, mutation_entities):
         mutation_name = "_".join([gene, mutation])
         # print('computing frequency of {}'.format(mutation_name))
