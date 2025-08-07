@@ -55,8 +55,10 @@ Please retry the query if there is a failure, e.g. GDC API failures, or connecti
 - `plot.ipynb` contains code to reproduce figures, the data is available in the supplement
 - `open_ai_batch.ipynb`: contains code for batch submission for `GPT-4o` evaluation
 - `other_applications.ipynb`: contains code for testing out novel features of QAG
-- `synthetic_data_query_intent_train_bert.ipynb`: code for training BERT model
+- `synthetic_data_query_intent_train_bert.ipynb`: code for training BERT model. Data available as a HF Dataset, refer to paper
 - `llm_evaluation_dataset.ipynb`: contains code templates for creating evaluation dataset
+- `survival_analysis.ipynb`: contais code for plotting survival data, data is downloaded from GDC portal
+- `eval-bert-model.ipynb`: contains code for testing BERT model performance on the test set. Data available in the supplement
 
 `gdc_pipeline.py`: this is the entrypoint code for launching QAG
 
