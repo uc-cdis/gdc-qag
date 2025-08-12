@@ -110,7 +110,6 @@ def construct_and_execute_api_call(
             gdc_genes_mutations,
             project_mappings,
         )
-        print("api_call_result {}".format(api_call_result))
         # print('cancer_entities {}'.format(cancer_entities))
     except Exception as e:
         print("unable to process query {} {}".format(query, str(e)))
@@ -248,8 +247,6 @@ def execute_pipeline(
 ):
     print("starting pipeline")
 
-    # queries input file
-    print(f"running test on input {df}")
     df[
         [
             "llama_base_output",
@@ -280,8 +277,7 @@ def execute_pipeline(
         )
     )
 
-    ### postprocess response
-    print("postprocessing response")
+    ### final check and confirmation 
     df_exploded[
         [
             "llama_base_stat",
@@ -299,14 +295,31 @@ def execute_pipeline(
     )
 
     final_columns = utilities.get_final_columns()
-
+    result = df_exploded[final_columns].copy()
+    result.rename(
+        columns={
+            "llama_base_output": "llama-3B baseline output",
+            "modified_prompt": "Query augmented prompt",
+            "helper_output": "GDC Result",
+            "ground_truth_stat": "Ground truth frequency from GDC",
+            "llama_base_stat": "llama-3B baseline frequency",
+            "delta_llama": "llama-3B frequency - Ground truth frequency",
+            "final_response": "Query augmented generation",
+            "intent": "Intent",
+            "cancer_entities": "Cancer entities",
+            "gene_entities": "Gene entities",
+            "mutation_entities": "Mutation entities",
+            "questions": "Question",
+        },
+        inplace=True,
+    )
+    result.index = ["GDC-QAG results"] * len(result)
+    
     if output_file_prefix:
         final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
         print("writing final results to {}".format(final_output))
-        df_exploded.to_csv(final_output, columns=final_columns)
-        result = df_exploded[final_columns]
+        result.to_csv(final_output, index=0)
     else:
-        result = df_exploded[final_columns]
         print(json.dumps(result.T.to_dict(), indent=2))
     print('completed')
     return result

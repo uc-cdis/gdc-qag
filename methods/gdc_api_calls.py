@@ -109,6 +109,8 @@ def get_ssm_id(gene, mutation):
         "size": 10,
     }
     try:
+        print('querying endpt: {}'.format(ssm_id_endpt))
+        print('params: {}'.format(params))
         response = requests.get(ssm_id_endpt, params=params)
         response_json = json.loads(response.content)
         ssm_id = response_json["data"]["hits"][0]["id"]
@@ -140,6 +142,8 @@ def get_ssm_counts(ssm_id, cancer_entities):
             ]}
         params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
         try:
+            print('querying endpt: {}'.format(ssm_occurrences_endpt))
+            print('params: {}'.format(params))
             response = requests.get(ssm_occurrences_endpt, params=params)
             ssm_counts = json.loads(response.content)
             for item in ssm_counts["data"]["hits"]:
@@ -204,6 +208,8 @@ def get_available_ssm_data_for_project(project):
     }
     params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
     try:
+        print('querying endpt: {}'.format(case_ssm_endpt))
+        print('params: {}'.format(params))
         response = requests.get(case_ssm_endpt, params=params)
         response_json = json.loads(response.content)
         total_case_count = response_json["data"]["pagination"]["total"]
