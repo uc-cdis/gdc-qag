@@ -109,12 +109,13 @@ def get_ssm_id(gene, mutation):
         "size": 10,
     }
     try:
-        print('querying endpt: {}'.format(ssm_id_endpt))
+        print('build API call, endpt: {}'.format(ssm_id_endpt))
         print('params: {}'.format(params))
         response = requests.get(ssm_id_endpt, params=params)
         response_json = json.loads(response.content)
         ssm_id = response_json["data"]["hits"][0]["id"]
     except Exception as e:
+        print('obtained ssm id {}'.format(ssm_id))
         print("unable to execute GDC API request {}".format(str(e)))
         ssm_id = None
     return ssm_id
@@ -142,7 +143,7 @@ def get_ssm_counts(ssm_id, cancer_entities):
             ]}
         params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
         try:
-            print('querying endpt: {}'.format(ssm_occurrences_endpt))
+            print('build API call, endpt: {}'.format(ssm_occurrences_endpt))
             print('params: {}'.format(params))
             response = requests.get(ssm_occurrences_endpt, params=params)
             ssm_counts = json.loads(response.content)
@@ -181,6 +182,8 @@ def get_available_cnv_data_for_project(project):
     }
     params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
     try:
+        print('build API call, endpt: {}'.format(case_ssm_endpt))
+        print('params: {}'.format(params))
         response = requests.get(case_ssm_endpt, params=params)
         response_json = json.loads(response.content)
         total_case_count = response_json["data"]["pagination"]["total"]
@@ -208,7 +211,7 @@ def get_available_ssm_data_for_project(project):
     }
     params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
     try:
-        print('querying endpt: {}'.format(case_ssm_endpt))
+        print('build API call, endpt: {}'.format(case_ssm_endpt))
         print('params: {}'.format(params))
         response = requests.get(case_ssm_endpt, params=params)
         response_json = json.loads(response.content)
@@ -242,6 +245,8 @@ def get_top_mutated_genes_by_project(cancer_entities, top_k):
         }
         params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
         try:
+            print('build API call, endpt: {}'.format(endpt))
+            print('params: {}'.format(params))
             response = requests.get(endpt, params=params)
             response_json = json.loads(response.content)
             top_mutated_genes_by_project[ce] = response_json["data"]["hits"][:top_k]
@@ -266,25 +271,35 @@ def return_joint_single_cnv_frequency(cnv, cnv_change, cnv_change_5_category):
         # skip if total number of cnv cases from API is 0
         if not total_number_of_cases_with_cnv_data:
             continue
+        
+        print('\nStep 5: Query GDC and process results\n')
+        print('total number of cases with CNV data {}'.format(
+                total_number_of_cases_with_cnv_data))
 
         if len(genes) > 1:
             cases_with_cnvs = [set(cnv[ce][g]["case_id_list"]) for g in genes]
+            print('genes: {}'.format(genes))
+            num_cases_with_cnvs = [len(i) for i in cases_with_cnvs]
+            print('number of cases with CNVs: {}'.format(num_cases_with_cnvs))
+            print('getting shared cases...')
             shared_cases = list(reduce(lambda x, y: x & y, cases_with_cnvs))
-            # print('shared_cases {}'.format(shared_cases))
+            print('number of shared cases {}'.format(len(shared_cases)))
+            print('preparing a GDC Result for query augmentation...')
             joint_frequency = round(
                 (len(shared_cases) / total_number_of_cases_with_cnv_data) * 100, 2
             )
-            result_text.append(
-                "joint frequency in {} is {}%".format(ce, joint_frequency)
-            )
+            gdc_result = "joint frequency in {} is {}%".format(ce, joint_frequency)
+            print('prepared GDC Result: {}'.format(gdc_result))
+            result_text.append(gdc_result)
         else:
             joint_frequency = 0
             for k2, v2 in v.items():
-                result_text.append(
-                    "The frequency of {} {} in {} is {}%".format(
+                print('preparing a GDC Result for query augmentation...')
+                gdc_result = "The frequency of {} {} in {} is {}%".format(
                         k2, cnv_change_5_category, ce, v2["frequency"]
                     )
-                )
+                print('prepared GDC Result: {}'.format(gdc_result))
+                result_text.append(gdc_result)
     return result_text
 
 
@@ -355,6 +370,8 @@ def get_freq_cnv_loss_or_gain(gene_entities, cancer_entities, query, cnv_and_ssm
             try:
                 # print('filters {}'.format(json.dumps(filters)))
                 # skip if response not successful
+                print('build API call, endpt: {}'.format(endpt))
+                print('params: {}'.format(params))
                 response = requests.get(endpt, params=params)
                 response_json = json.loads(response.content)
             except Exception as e:
@@ -427,6 +444,8 @@ def get_msi_frequency(cancer_entities):
         }
         params = {"filters": json.dumps(filters), "fields": fields, "size": 10000}
         try:
+            print('build API call, endpt: {}'.format(endpt))
+            print('params: {}'.format(params))
             response = requests.get(endpt, params=params)
             response_json = json.loads(response.content)
 
@@ -437,13 +456,20 @@ def get_msi_frequency(cancer_entities):
                     # exclude None
                     if item['msi_status']:
                         msi_results.append(item["msi_status"])
-            freq = msi_results.count("MSI") / len(msi_results)
+            msi_pos = msi_results.count('MSI')
+            msi_total = len(msi_results)
+            freq = msi_pos / msi_total
+            print('\nStep 5: Query GDC and process results\n')
+            print('obtained {} BAM files with MSI tag, out of a total of {} BAM files with MSI information'.format(
+                msi_pos, msi_total
+            ))
             msi_h_frequency[ce] = {"frequency": round(freq * 100, 2)}
-            result_text.append(
-                "The frequency of MSI in {} is {}%".format(
+            print('preparing a GDC Result for query augmentation...')
+            gdc_result = "The frequency of MSI in {} is {}%".format(
                     ce, msi_h_frequency[ce]["frequency"]
                 )
-            )
+            print('prepared GDC Result: {}'.format(gdc_result)) 
+            result_text.append(gdc_result)
         except Exception as e:
             print("unable to execute GDC API request {}".format(str(e)))
     ce_api_success = list(msi_h_frequency.keys())
@@ -462,6 +488,8 @@ def get_ensembl_gene_ids(gene_entities):
         }
         params = {"filters": json.dumps(filters), "fields": fields, "size": 100}
         try:
+            print('build API call, endpt: {}'.format(endpt))
+            print('params: {}'.format(params))
             response = requests.get(endpt, params=params)
             response_json = json.loads(response.content)
             ensembl_gene_ids.append(response_json["data"]["hits"][0]["gene_id"])
@@ -490,6 +518,8 @@ def get_total_variation_data_for_project(project):
     }
     params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
     try:
+        print('build API call, endpt: {}'.format(case_ssm_endpt))
+        print('params: {}'.format(params))
         response = requests.get(case_ssm_endpt, params=params)
         response_json = json.loads(response.content)
         total_case_count = response_json["data"]["pagination"]["total"]
@@ -525,6 +555,8 @@ def get_cases_with_ssms_in_a_gene(project, gene_name):
     }
     params = {"filters": json.dumps(filters), "fields": fields, "size": 1000}
     try:
+        print('build API call, endpt: {}'.format(endpt))
+        print('params: {}'.format(params))
         response = requests.get(endpt, params=params)
         response_json = json.loads(response.content)
         case_id_list = []
@@ -559,20 +591,24 @@ def run_cnv_ssm_api(decompose_result, cancer_entities, query):
             ssm_result = get_cases_with_ssms_in_a_gene(
                 project=ce, gene_name=decompose_result["mut_gene"]
             )
+            total_case_count = get_total_variation_data_for_project(project=ce)
+            print('\nStep 5: Query GDC and process results\n')
             # calcuate overlap of cases and return freq
+            print('getting shared cases with CNV and SSMs...')
             cases_with_ssm_and_cnvs = [
                 set(cnv_result[ce][decompose_result["cnv_gene"]]["case_id_list"]),
                 set(ssm_result["case_id_list"]),
             ]
             shared_cases = list(reduce(lambda x, y: x & y, cases_with_ssm_and_cnvs))
-            total_case_count = get_total_variation_data_for_project(project=ce)
-            # print('shared_cases, len {} {}'.format(shared_cases, len(shared_cases)))
-            # print('total_case_count {}'.format(total_case_count))
+            print('number of shared_cases {}'.format(len(shared_cases)))
+            print('total case count {}'.format(total_case_count))
             freq = round((len(shared_cases) / total_case_count) * 100, 2)
-            joint_freq = "The joint frequency in {} is {}%".format(ce, freq)
+            print('preparing a GDC Result for query augmentation...')
+            gdc_result = "The joint frequency in {} is {}%".format(ce, freq)
         except Exception as e:
-            joint_freq = "joint freq in {} is not available".format(ce)
-        result.append(joint_freq)
+            gdc_result = "joint freq in {} is not available".format(ce)
+        print('prepared GDC Result {}'.format(gdc_result))
+        result.append(gdc_result)
     return result, cancer_entities
 
 
@@ -588,6 +624,7 @@ def get_top_cases_counts_by_gene(gene_entities, cancer_entities):
         endpt = "https://api.gdc.cancer.gov/analysis/top_cases_counts_by_genes?gene_ids={}".format(
             ",".join(emsembl_gene_ids)
         )
+        print('build API call, endpt: {}'.format(endpt))
         response = requests.get(endpt)
         response_json = json.loads(response.content)
         try:
@@ -602,15 +639,20 @@ def get_top_cases_counts_by_gene(gene_entities, cancer_entities):
                 "cases_without_mutations"
             ] = cases_without_mutations
             top_cases_counts_by_gene[ce]["total_case_count"] = total_case_count
+            print('\nStep 5: Query GDC and process results\n')
+            print('obtained {} cases with mutations and a total case count of {}'.format(
+                cases_with_mutations, total_case_count
+            ))
             freq = cases_with_mutations / total_case_count
             top_cases_counts_by_gene[ce]["frequency"] = round(freq * 100, 2)
-            result.append(
-                "The frequency of cases with mutations in {} is {}%".format(
+            print('preparing a GDC Result for query augmentation...')
+            gdc_result = "The frequency of cases with mutations in {} is {}%".format(
                     ce, top_cases_counts_by_gene[ce]["frequency"]
                 )
-            )
+            result.append(gdc_result)
         except Exception as e:
             result.append("frequency unavailable from API for {}".format(ce))
+    print('prepared GDC Result {}'.format(gdc_result))
     cancer_entities = list(top_cases_counts_by_gene.keys())
     return result, cancer_entities
 

@@ -156,7 +156,9 @@ def calculate_joint_ssm_frequency(ssm_statistics, total_case_count, mutation_lis
             set(ssm_statistics[mutation][project]["case_id_list"])
             for mutation in mutation_list
         ]
+        print('getting shared cases...')
         shared_cases = list(reduce(lambda x, y: x & y, cases_with_mutation))
+        print('number of shared cases: {}'.format(len(shared_cases)))
         if shared_cases:
             if project not in joint_ssm_frequency:
                 joint_ssm_frequency[project] = {}
@@ -175,22 +177,20 @@ def calculate_joint_ssm_frequency(ssm_statistics, total_case_count, mutation_lis
 
 def flatten_ssm_results_to_text(result, result_type):
     result_text = []
+    print('preparing a GDC Result for query augmentation...')
     if result_type == "joint_frequency":
         for k, v in result.items():
             if k == "joint_frequency":
                 for k2, v2 in v.items():
-                    result_text.append(
-                        "joint frequency in {} is {}%".format(k2, v2["joint_frequency"])
-                    )
+                    gdc_result = "joint frequency in {} is {}%".format(k2, v2["joint_frequency"])
+                    result_text.append(gdc_result)
     else:
         for k, v in result.items():
             if k != "joint_frequency":
                 for k2, v2 in v.items():
-                    result_text.append(
-                        "The frequency of {} in {} is {}%".format(
-                            k, k2, v2["frequency"]
-                        )
-                    )
+                    gdc_result = "The frequency of {} in {} is {}%".format(k, k2, v2["frequency"])
+                    result_text.append(gdc_result)
+    print('prepared GDC Result: {}'.format(gdc_result))
     return result_text
 
 
