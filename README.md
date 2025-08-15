@@ -80,6 +80,7 @@ In Stomach Adenocarcinoma TCGA-STAD project what is the occurrence rate of micro
 - `llm_evaluation_dataset.ipynb`: contains code templates for creating evaluation dataset
 - `survival_analysis.ipynb`: contais code for plotting survival data, data is downloaded from GDC portal
 - `eval-bert-model.ipynb`: contains code for testing BERT model performance on the test set. Data available in the supplement
+- `mcp_tools.ipynb`: an example of MCP client server execution using gradio exposed MCP server URL
 
 `gdc_pipeline.py`: this is the entrypoint code for launching QAG
 
