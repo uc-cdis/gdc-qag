@@ -9,6 +9,15 @@ import numpy as np
 import pandas as pd
 import spacy
 import torch
+import warnings
+
+# spacy warning, upgrade to latest spacy
+# in the next release
+warnings.filterwarnings(
+    "ignore",
+    message="Possible set union at position",
+    category=FutureWarning
+)
 
 
 from huggingface_hub import HfFolder, hf_hub_download
@@ -110,19 +119,12 @@ def construct_modified_query(query, helper_output):
 
 
 
-def get_total_case_counts(ssm_counts_by_project):
-    for project in ssm_counts_by_project.keys():
-        total_case_count = gdc_api_calls.get_available_ssm_data_for_project(project)
-        ssm_counts_by_project[project]["total_case_counts"] = total_case_count
-    return ssm_counts_by_project
-
-
-def calculate_ssm_frequency(ssm_statistics, cancer_entities, project_mappings):
+def calculate_ssm_frequency(ssm_statistics, total_case_count, cancer_entities, project_mappings):
     ssm_frequency = {}
     for project in ssm_statistics.keys():
         freq = (
             ssm_statistics[project]["ssm_counts"]
-            / ssm_statistics[project]["total_case_counts"]
+            / total_case_count[project]
         )
         ssm_frequency[project] = {"frequency": round(freq * 100, 2)}
     
@@ -134,7 +136,7 @@ def calculate_ssm_frequency(ssm_statistics, cancer_entities, project_mappings):
     return ssm_frequency
 
 
-def calculate_joint_ssm_frequency_v2(ssm_statistics, mutation_list, cancer_entities):
+def calculate_joint_ssm_frequency(ssm_statistics, total_case_count, mutation_list, cancer_entities):
     # stores the result for all cancers
     joint_ssm_frequency = {}
     # initialize joint_freq by cancer entities
@@ -154,14 +156,13 @@ def calculate_joint_ssm_frequency_v2(ssm_statistics, mutation_list, cancer_entit
             set(ssm_statistics[mutation][project]["case_id_list"])
             for mutation in mutation_list
         ]
+        print('getting shared cases...')
         shared_cases = list(reduce(lambda x, y: x & y, cases_with_mutation))
+        print('number of shared cases: {}'.format(len(shared_cases)))
         if shared_cases:
             if project not in joint_ssm_frequency:
                 joint_ssm_frequency[project] = {}
-            total_case_counts = gdc_api_calls.get_available_ssm_data_for_project(
-                project
-            )
-            joint_frequency = len(shared_cases) / total_case_counts
+            joint_frequency = len(shared_cases) / total_case_count[project]
             joint_ssm_frequency[project]["joint_frequency"] = round(
                 joint_frequency * 100, 2
             )
@@ -176,66 +177,62 @@ def calculate_joint_ssm_frequency_v2(ssm_statistics, mutation_list, cancer_entit
 
 def flatten_ssm_results_to_text(result, result_type):
     result_text = []
+    print('preparing a GDC Result for query augmentation...')
     if result_type == "joint_frequency":
         for k, v in result.items():
             if k == "joint_frequency":
                 for k2, v2 in v.items():
-                    result_text.append(
-                        "joint frequency in {} is {}%".format(k2, v2["joint_frequency"])
-                    )
+                    gdc_result = "joint frequency in {} is {}%".format(k2, v2["joint_frequency"])
+                    result_text.append(gdc_result)
     else:
         for k, v in result.items():
             if k != "joint_frequency":
                 for k2, v2 in v.items():
-                    result_text.append(
-                        "The frequency of {} in {} is {}%".format(
-                            k, k2, v2["frequency"]
-                        )
-                    )
+                    gdc_result = "The frequency of {} in {} is {}%".format(k, k2, v2["frequency"])
+                    result_text.append(gdc_result)
+    print('prepared GDC Result: {}'.format(gdc_result))
     return result_text
 
 
 def get_ssm_frequency(
     gene_entities, mutation_entities, cancer_entities, project_mappings
 ):
-    ssm_statistics = {}
+    total_case_count = {}
     mutation_list = []
     result = {}
+    ssm_statistics = {}
+
+    for ce in cancer_entities:
+        total_case_count[ce] = gdc_api_calls.get_available_ssm_data_for_project(ce)
+
     # to match the genes with mutations
     if len(mutation_entities) > len(gene_entities):
         gene_entities = gene_entities * len(mutation_entities) 
     for gene, mutation in zip(gene_entities, mutation_entities):
         mutation_name = "_".join([gene, mutation])
-        # print('computing frequency of {}'.format(mutation_name))
         mutation_list.append(mutation_name)
         ssm_id = gdc_api_calls.get_ssm_id(gene, mutation)
-        ssm_counts_by_project = gdc_api_calls.get_ssm_counts(ssm_id, cancer_entities)
-        ssm_statistics[mutation_name] = get_total_case_counts(ssm_counts_by_project)
-        # test code for generalizability to multiple cancer entities
-        # full_result format is {'project1': {'frequency': }, 'project2': {'frequency':}, 'projectn': {'frequency':}}
+        ssm_counts_by_project = gdc_api_calls.get_ssm_counts(ssm_id, cancer_entities)        
+        ssm_statistics[mutation_name] = ssm_counts_by_project
         result[mutation_name] = calculate_ssm_frequency(
-            ssm_statistics[mutation_name], cancer_entities, project_mappings
+            ssm_statistics[mutation_name], total_case_count, cancer_entities, project_mappings
         )
-        # result[mutation_name] = {
-        #    k: v for k, v in full_result.items()
-        #}
-        # result format:
-        """
-        { 
-        'gene_mutation': # e.g. JAK2_V617F
-        {
-            'project1': {'frequency': }, 
-            'project2': {'frequency':}, 
-            'projectn': {'frequency':}
-        }
-        }
-        'project1': {'frequency': }, 'project2': {'frequency':}
-        """
+    
+    print('\nStep 5: Query GDC and process results\n')
+    for mut in mutation_list:
+        print('mutation: {}'.format(mut))
+        for ce in cancer_entities:
+            print('number of cases with mutation: {}'.format(
+                ssm_statistics[mut][ce]["ssm_counts"]))
+            print('total case count: {}'.format(
+                total_case_count[ce]))
+
+
     # only supporting for two mutations atm
     if len(mutation_list) > 1:
         # print('computing joint frequency')
-        result["joint_frequency"] = calculate_joint_ssm_frequency_v2(
-            ssm_statistics, mutation_list=mutation_list, cancer_entities=cancer_entities
+        result["joint_frequency"] = calculate_joint_ssm_frequency(
+            ssm_statistics, total_case_count, mutation_list, cancer_entities
         )
         result_text = flatten_ssm_results_to_text(result, result_type="joint_frequency")
     else:
@@ -243,7 +240,6 @@ def get_ssm_frequency(
         result_text = flatten_ssm_results_to_text(
             result, result_type="single_frequency"
         )
-    # print('result_text {}'.format(result_text))
     return result_text, cancer_entities
 
 

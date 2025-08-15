@@ -63,7 +63,11 @@ def execute_api_call(
 def construct_and_execute_api_call(
     query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
 ):
-    print("query:\n{}\n".format(query))
+    print(
+        "\nStep 1: Starting GDC-QAG on input natural language query:\n{}\n".format(
+            query
+        )
+    )
     # Infer entities
     initial_cancer_entities = utilities.return_initial_cancer_entities(
         query, model="en_ner_bc5cdr_md"
@@ -92,15 +96,16 @@ def construct_and_execute_api_call(
         query=query,
         gdc_genes_mutations=gdc_genes_mutations,
     )
-
+    print("\nStep 2: Entity Extraction\n")
     print("gene entities {}".format(gene_entities))
     print("mutation entities {}".format(mutation_entities))
     print("cancer entities {}".format(cancer_entities))
 
     # infer user intent
     intent = utilities.infer_user_intent(query, intent_model, intent_tok)
-    print("user intent:\n{}\n".format(intent))
+    print("\nStep 3: Intent Inference:\n{}\n".format(intent))
     try:
+        print("\nStep 4: API call builder for intent {}\n".format(intent))
         api_call_result, cancer_entities = execute_api_call(
             intent,
             gene_entities,
@@ -110,7 +115,6 @@ def construct_and_execute_api_call(
             gdc_genes_mutations,
             project_mappings,
         )
-        print("api_call_result {}".format(api_call_result))
         # print('cancer_entities {}'.format(cancer_entities))
     except Exception as e:
         print("unable to process query {} {}".format(query, str(e)))
@@ -154,7 +158,9 @@ def batch_test(
     intent_tok
 ):
     modified_query = utilities.construct_modified_query_base_llm(query)
+    print(f"obtain baseline llama-3B response on modified query: {modified_query}")
     llama_base_output = generate_response(modified_query, model, tok)
+    print(f"llama-3B baseline response: {llama_base_output}")
     try:
         result = construct_and_execute_api_call(
             query, gdc_genes_mutations, project_mappings, intent_model, intent_tok
@@ -207,8 +213,12 @@ def get_prefinal_response(row, model, tok):
         helper_output = row["helper_output"]
     except Exception as e:
         print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
+    print("\nStep 6: Augment LLM prompt for llama-3B\n")
     modified_query = utilities.construct_modified_query(query, helper_output)
+    print("{}".format(modified_query))
+    print("\nStep 7: Generate LLM response R on query augmented prompt\n")
     prefinal_llama_with_helper_output = generate_response(modified_query, model, tok)
+    print("{}".format(prefinal_llama_with_helper_output))
     return pd.Series([modified_query, prefinal_llama_with_helper_output])
 
 
@@ -246,10 +256,6 @@ def execute_pipeline(
     tok, intent_model, intent_tok, 
     project_mappings, output_file_prefix
 ):
-    print("starting pipeline")
-
-    # queries input file
-    print(f"running test on input {df}")
     df[
         [
             "llama_base_output",
@@ -280,8 +286,8 @@ def execute_pipeline(
         )
     )
 
-    ### postprocess response
-    print("postprocessing response")
+    ### final check and confirmation 
+    print("\nStep 8: Final check and confirmation\n")
     df_exploded[
         [
             "llama_base_stat",
@@ -299,14 +305,37 @@ def execute_pipeline(
     )
 
     final_columns = utilities.get_final_columns()
-
+    result = df_exploded[final_columns].copy()
+    result.rename(
+        columns={
+            "llama_base_output": "llama-3B baseline output",
+            "modified_prompt": "Query augmented prompt",
+            "helper_output": "GDC Result",
+            "ground_truth_stat": "Ground truth frequency from GDC",
+            "llama_base_stat": "llama-3B baseline frequency",
+            "delta_llama": "llama-3B frequency - Ground truth frequency",
+            "final_response": "Query augmented generation",
+            "intent": "Intent",
+            "cancer_entities": "Cancer entities",
+            "gene_entities": "Gene entities",
+            "mutation_entities": "Mutation entities",
+            "questions": "Question",
+        },
+        inplace=True,
+    )
+    result.index = ["GDC-QAG results"] * len(result)
+    print(
+        "Query Augmented Generation final response {}".format(
+            "\n".join(result["Query augmented generation"].astype(str))
+        )
+    )
+    print("completed")
+    
     if output_file_prefix:
         final_output = os.path.join("csvs", output_file_prefix + ".results.csv")
         print("writing final results to {}".format(final_output))
-        df_exploded.to_csv(final_output, columns=final_columns)
-        result = df_exploded[final_columns]
+        result.to_csv(final_output, index=0)
     else:
-        result = df_exploded[final_columns]
         print(json.dumps(result.T.to_dict(), indent=2))
     print('completed')
     return result
