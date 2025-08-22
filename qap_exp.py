@@ -127,6 +127,8 @@ def postprocess_llm_description(tok, descriptive_response):
         ))
         postprocessed_desc_response = 'unable to postprocess LLM gene description'
 
+    if not postprocessed_desc_response.endswith('.'):
+        postprocessed_desc_response += '.'
     return postprocessed_desc_response
 
 

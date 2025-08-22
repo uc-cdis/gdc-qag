@@ -338,7 +338,8 @@ def execute_pipeline(
     result.rename(
         columns={
             "llama_base_output": "llama-3B baseline output",
-            "query_augmented_prompt": "Query augmented prompt",
+            "descriptive_prompt": "Descriptive prompt",
+            "percentage_prompt": "Descriptive prompt",
             "gdc_result": "GDC Result",
             "gdc_qag_base_stat": "GDC-QAG frequency",
             "llama_base_stat": "llama-3B baseline frequency",
