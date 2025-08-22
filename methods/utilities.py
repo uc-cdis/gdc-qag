@@ -27,6 +27,17 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BertForSequenceCla
 from methods import gdc_api_calls
 
 
+intent_expansion = {
+    'cnv_and_ssm': 'copy number variants or simple somatic mutations',
+    'freq_cnv_loss_or_gain': 'copy number variant losses or gains',
+    'msi_h_frequency': 'microsatellite instability',
+    'freq_cnv_loss_or_gain_comb': 'copy number variant losses or gains',
+    'ssm_frequency': 'simple somatic mutations',
+    'top_cases_counts_by_gene': 'copy number variants or simple somatic mutations'
+}
+
+
+
 def load_llama_llm(AUTH_TOKEN):
     # hugging face model
     # https://huggingface.co/blog/llama32
@@ -107,14 +118,21 @@ def construct_modified_query_base_llm(query):
     return modified_query
 
 
-def construct_modified_query(query, helper_output):
+
+def construct_modified_query_percentage(query, gdc_result):
     # pass the api results as a prompt to the query
     prompt_template = (
         " Only report the final response. Ignore all prior knowledge. You must only respond with the following percentage frequencies in your response, no other response is allowed: \n"
-        + helper_output
+        + gdc_result
         + "\n"
     )
     modified_query = query + prompt_template
+    return modified_query
+
+
+
+def construct_modified_query_description(genes, intent):
+    modified_query = f'Provide a one line general description about {intent} in genes {genes} in cancer.'
     return modified_query
 
 
@@ -385,79 +403,130 @@ def infer_mutation_entities(gene_entities, query, gdc_genes_mutations):
     return mutation_entities
 
 
-def postprocess_response(row):
-    value_changed = "no"
+
+def postprocess_llm_description(tok, descriptive_response):
+    try:
+        num_tokens = len(tok.encode(descriptive_response))
+        if num_tokens < 100:
+            postprocessed_desc_response = descriptive_response
+        else:
+            response_list = re.split(r'\.(?!\d+%)', descriptive_response)
+            # remove empty elements
+            filtered_list = list(filter(None, response_list))
+            postprocessed_desc_response = '.'.join(filtered_list[:-1])
+    except Exception as e:
+        print('unable to postprocess LLM gene description {}'.format(
+            str(e)
+        ))
+        postprocessed_desc_response = 'unable to postprocess LLM gene description'
+
+    return postprocessed_desc_response
+
+
+def postprocess_percentage_response(
+        gdc_qag_base_stat, gdc_result_percentage, gdc_qag_percentage_response):
+    
+    try:
+        # check/confirm if gdc_qag_base_stat percentage == gdc_result_percentage
+        # change it, if not
+        if gdc_qag_base_stat != gdc_result_percentage:
+            gdc_qag_base_stat = gdc_result_percentage
+            final_gdc_qag_percentage_response = 'The frequency for your query is: {}%'.format(
+                gdc_qag_base_stat)
+        else:
+            final_gdc_qag_percentage_response = gdc_qag_percentage_response
+    except Exception as e:
+        print('unable to postprocess percentage frequency {}'.format(
+            str(e)
+        ))
+        final_gdc_qag_percentage_response = 'unable to postprocess percentage frequency'
+    return final_gdc_qag_percentage_response
+
+
+def postprocess_response(tok, row):
+    # three goals:
+    # goal 1:
+    # check/confirm the results in gdc-qag percentage response
+    # return a percentage response for gdc-qag
+    # goal 2:
+    # postprocess descriptive response
+    # goal 3:
+    # return concatenated final response from gdc_qag
+    # (descriptive response + percentage response)
+
     pattern = r".*?(\d*\.\d*)%.*?"
-    delta_final = np.nan
-    delta_prefinal = np.nan
-    generated_stat_final = np.nan
+
+    ###### various inputs ###############################
 
     try:
-        helper_output = row["helper_output"]
+        # this is the result obtained in GDC-QAG via API
+        gdc_result = row["gdc_result"]
     except Exception as e:
-        # print('unable to generate helper output, returning nan')
-        return pd.Series(["np.nan"] * 8)
+        print('GDC Result not found in gdc_qag output, returning nan {}'.format(
+            str(e)
+        ))
+        gdc_result = np.nan
+    
+    try:
+        # extract gdc_result percentage from gdc_result
+        gdc_result_percentage = float(re.search(pattern, gdc_result).group(1))
+    except Exception as e:
+        print('unable to extract percentage from gdc result {}'.format(
+            str(e)))
+        gdc_result_percentage = np.nan
 
-    pre_final_response = row["pre_final_llama_with_helper_output"]
+
+    try:
+        # this is the LLM generated response with freq, after seeing gdc_result
+        gdc_qag_percentage_response = row['percentage_response']
+    except Exception as e:
+        print('LLM generated gdc_qag percentage response not found, returning nan {}'.format(
+            str(e)
+        ))
+        gdc_qag_percentage_response = np.nan
+    
+    try:
+        # extract gdc_qag percentage from LLM response
+        gdc_qag_base_stat = float(re.search(pattern, gdc_qag_percentage_response).group(1))
+    except Exception as e:
+        print('unable to extract percentage from gdc_qag percentage response {}'.format(
+            str(e)))
+        gdc_qag_base_stat = np.nan
+    
+
+    # llama-3B base output
     llama_base_output = row["llama_base_output"]
 
     try:
+        # extract llama percentage from llama base output
         llama_base_stat = float(re.search(pattern, llama_base_output).group(1))
     except Exception as e:
-        # print('unable to extract llama base stat {}'.format(str(e)))
+        print('unable to extract llama base stat {}'.format(str(e)))
         llama_base_stat = np.nan
-    try:
-        generated_stat_prefinal = float(re.search(pattern, pre_final_response).group(1))
-    except Exception as e:
-        # print('unable to extract generated stat {}'.format(str(e)))
-        generated_stat_prefinal = np.nan
+    
+    
+    ############ postprocess LLM description + percentage ###############
 
-    try:
-        ground_truth_stat = float(re.search(pattern, helper_output).group(1))
-    except Exception as e:
-        # print('unable to extract ground truth stat {}'.format(str(e)))
-        ground_truth_stat = np.nan
+    final_gdc_qag_desc_response = postprocess_llm_description(
+        tok, row['descriptive_response']
+    )
 
-    try:
-        delta_llama = llama_base_stat - ground_truth_stat
-    except Exception as e:
-        # print('unable to calculate delta_llama {}'.format(str(e)))
-        delta_llama = np.nan
+    final_gdc_qag_percentage_response = postprocess_percentage_response(
+        gdc_qag_base_stat, gdc_result_percentage, gdc_qag_percentage_response
+    )
 
-    if not np.isnan(generated_stat_prefinal) and not np.isnan(ground_truth_stat):
-        delta_prefinal = generated_stat_prefinal - ground_truth_stat
-        if delta_prefinal != 0.0:
-            final_response = "The final answer is: {}%".format(ground_truth_stat)
-            value_changed = "yes"
-        else:
-            final_response = pre_final_response
-        generated_stat_final = float(re.search(pattern, final_response).group(1))
-        delta_final = generated_stat_final - ground_truth_stat
-    else:
-        final_response = "unable to postprocess, check generated or truth stat"
-        value_changed = "na"
-    """
-  print('check if all values are populated:\n')
-  print('delta_llama {}'.format(delta_llama))
-  print('value_changed {}'.format(value_changed))
-  print('ground_truth_stat {}'.format(ground_truth_stat))
-  print('generated_stat_prefinal {}'.format(generated_stat_prefinal))
-  print('delta_prefinal {}'.format(delta_prefinal))
-  print('generated_stat_final {}'.format(generated_stat_final))
-  print('delta_final {}'.format(delta_final))
-  print('final_response {}'.format(final_response))
-  """
+    final_gdc_qag_response = '.'.join([
+        final_gdc_qag_desc_response,
+        final_gdc_qag_percentage_response
+        ])
+
     return pd.Series(
         [
             llama_base_stat,
-            delta_llama,
-            value_changed,
-            ground_truth_stat,
-            generated_stat_prefinal,
-            delta_prefinal,
-            generated_stat_final,
-            delta_final,
-            final_response,
+            gdc_qag_base_stat,
+            final_gdc_qag_desc_response,
+            final_gdc_qag_percentage_response,
+            final_gdc_qag_response
         ]
     )
 
@@ -468,6 +537,7 @@ def set_hf_token(token_path):
     with open(token_path, "r") as hf_token_file:
         HF_TOKEN = hf_token_file.read().strip()
     HfFolder.save_token(HF_TOKEN)
+
 
 
 def get_final_columns():
@@ -481,11 +551,13 @@ def get_final_columns():
         "intent",
         "llama_base_output",
         "llama_base_stat",
-        "helper_output",
-        "ground_truth_stat",
-        "modified_prompt",
-        "final_response",
-        "delta_llama"
+        "gdc_result",
+        "gdc_qag_base_stat",
+        "descriptive_prompt",
+        "percentage_prompt",
+        "final_gdc_qag_desc_response",
+        "final_gdc_qag_percentage_response",
+        "final_gdc_qag_response",
     ]
     return final_columns
 
