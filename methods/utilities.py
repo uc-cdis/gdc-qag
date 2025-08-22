@@ -420,6 +420,8 @@ def postprocess_llm_description(tok, descriptive_response):
         ))
         postprocessed_desc_response = 'unable to postprocess LLM gene description'
 
+    if not postprocessed_desc_response.endswith('.'):
+        postprocessed_desc_response += '.'
     return postprocessed_desc_response
 
 
@@ -515,10 +517,7 @@ def postprocess_response(tok, row):
         gdc_qag_base_stat, gdc_result_percentage, gdc_qag_percentage_response
     )
 
-    final_gdc_qag_response = '.'.join([
-        final_gdc_qag_desc_response,
-        final_gdc_qag_percentage_response
-        ])
+    final_gdc_qag_response = final_gdc_qag_desc_response + final_gdc_qag_percentage_response
 
     return pd.Series(
         [
