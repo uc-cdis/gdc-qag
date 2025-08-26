@@ -34,6 +34,7 @@ To test on an input file:
 ```
 (gdc-qag-py3.10) aartiv@kl35-gpu-3:~/gdc-qag$ python gdc_pipeline.py --input-file csvs/baby_tests.csv
 ```
+Note: if your question has any commas, you will need to wrap question in quotes "".
 
 To test on a single question:
 
@@ -63,7 +64,7 @@ What is the incidence of simple somatic mutations or copy number variants in KRA
 What percentage of cancer cases have simple somatic mutations or copy number variants in KIT in the genomic data commons for Acute Myeloid Leukemia TCGA-LAML project?
 In Stomach Adenocarcinoma TCGA-STAD project what is the occurrence rate of microsatellite instability in the genomic data commons?
 ```
-
+For a full list of the types of questions you can design, see Table S3 in the upcoming paper.
 
 ## Structure of this repository and useful files
 
