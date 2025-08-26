@@ -64,7 +64,10 @@ What is the incidence of simple somatic mutations or copy number variants in KRA
 What percentage of cancer cases have simple somatic mutations or copy number variants in KIT in the genomic data commons for Acute Myeloid Leukemia TCGA-LAML project?
 In Stomach Adenocarcinoma TCGA-STAD project what is the occurrence rate of microsatellite instability in the genomic data commons?
 ```
-For a full list of the types of questions you can design, see Table S3 in the upcoming paper.
+For a full list of the types of questions you can design, see Table S3 in the upcoming paper
+
+## Specifying cancer disease type in query
+GDC-QAG relies on GDC /project endpoint to accurately map disease information from a query to a specific GDC project. This can be refined using more sophisticated NER models and such. For maximum success with the current version, try to specify disease information in the form of GDC Project Name, e.g. `breast invasive carcinoma` mentioned in the query will map the query to the `TCGA-BRCA` project.
 
 ## Structure of this repository and useful files
 
