@@ -3,13 +3,14 @@
 import json
 import re
 import time
-from functools import reduce, wraps
 
 import numpy as np
 import pandas as pd
 import spacy
 import torch
 import warnings
+
+from functools import reduce, wraps
 
 # spacy warning, upgrade to latest spacy
 # in the next release
@@ -36,6 +37,16 @@ intent_expansion = {
     'top_cases_counts_by_gene': 'copy number variants or simple somatic mutations'
 }
 
+
+def timeit(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = fn(*args, **kwargs)
+        end = time.perf_counter()
+        print(f"{fn.__name__} took {end - start:.4f} seconds")
+        return result
+    return wrapper
 
 
 def load_llama_llm(AUTH_TOKEN):
@@ -151,6 +162,7 @@ def calculate_ssm_frequency(ssm_statistics, total_case_count, cancer_entities, p
         if c not in ssm_frequency:
             ssm_frequency[c] = {'frequency': 0.0}
 
+    print('ssm_frequency {}'.format(ssm_frequency))
     return ssm_frequency
 
 
@@ -240,8 +252,13 @@ def get_ssm_frequency(
     for mut in mutation_list:
         print('mutation: {}'.format(mut))
         for ce in cancer_entities:
-            print('number of cases with mutation: {}'.format(
-                ssm_statistics[mut][ce]["ssm_counts"]))
+            try:
+                print('number of cases with mutation: {}'.format(
+                    ssm_statistics[mut][ce]["ssm_counts"]))
+            except Exception as e:
+                print('number of cases with mutation: {}'.format(
+                    ssm_statistics
+                ))
             print('total case count: {}'.format(
                 total_case_count[ce]))
 
@@ -442,9 +459,10 @@ def postprocess_percentage_response(
             str(e)
         ))
         final_gdc_qag_percentage_response = 'unable to postprocess percentage frequency'
-    return final_gdc_qag_percentage_response
+    return gdc_qag_base_stat, final_gdc_qag_percentage_response
 
 
+@timeit
 def postprocess_response(tok, row):
     # three goals:
     # goal 1:
@@ -513,7 +531,7 @@ def postprocess_response(tok, row):
         tok, row['descriptive_response']
     )
 
-    final_gdc_qag_percentage_response = postprocess_percentage_response(
+    gdc_qag_base_stat, final_gdc_qag_percentage_response = postprocess_percentage_response(
         gdc_qag_base_stat, gdc_result_percentage, gdc_qag_percentage_response
     )
 
@@ -554,19 +572,8 @@ def get_final_columns():
         "gdc_qag_base_stat",
         "descriptive_prompt",
         "percentage_prompt",
-        "final_gdc_qag_desc_response",
-        "final_gdc_qag_percentage_response",
         "final_gdc_qag_response",
     ]
     return final_columns
 
 
-def timeit(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        start = time.perf_counter()
-        result = fn(*args, **kwargs)
-        end = time.perf_counter()
-        print(f"{fn.__name__} took {end - start:.4f} seconds")
-        return result
-    return wrapper

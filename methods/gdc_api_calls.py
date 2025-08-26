@@ -163,6 +163,7 @@ def get_ssm_counts(ssm_id, cancer_entities):
                 )
         except Exception as e:
             print("unable to execute GDC API request {}".format(str(e)))
+    print('ssm counts by proj {}'.format(ssm_counts_by_project))
     return ssm_counts_by_project
 
 
@@ -293,10 +294,14 @@ def return_joint_single_cnv_frequency(cnv, cnv_change, cnv_change_5_category):
             result_text.append(gdc_result)
         else:
             joint_frequency = 0
+            num_cases_with_cnvs = len(set(cnv[ce][genes[0]]["case_id_list"]))
+            print('number of cases with cnvs {}'.format(num_cases_with_cnvs))
+            frequency = round((num_cases_with_cnvs / total_number_of_cases_with_cnv_data) * 100, 2)
+            
             for k2, v2 in v.items():
                 print('preparing a GDC Result for query augmentation...')
                 gdc_result = "The frequency of {} {} in {} is {}%".format(
-                        k2, cnv_change_5_category, ce, v2["frequency"]
+                        k2, cnv_change_5_category, ce, frequency
                     )
                 print('prepared GDC Result: {}'.format(gdc_result))
                 result_text.append(gdc_result)
@@ -378,11 +383,6 @@ def get_freq_cnv_loss_or_gain(gene_entities, cancer_entities, query, cnv_and_ssm
                 print("exception: {}".format(str(e)))
                 continue
 
-            total_number_of_cases_with_cnv_data = get_available_cnv_data_for_project(ce)
-            # skip if cannot obtain total # of cnv cases from API
-            if not total_number_of_cases_with_cnv_data:
-                continue
-
             if not ce in cnv:
                 cnv[ce] = {}
             if not ge in cnv[ce]:
@@ -393,10 +393,7 @@ def get_freq_cnv_loss_or_gain(gene_entities, cancer_entities, query, cnv_and_ssm
                 if item["case"]["case_id"]:
                     case_id_list.append(item["case"]["case_id"])
             number_of_cases_with_cnv_change = len(case_id_list)
-            # print('number of cases with cnv change {}'.format(number_of_cases_with_cnv_change))
-            freq = number_of_cases_with_cnv_change / total_number_of_cases_with_cnv_data
             cnv[ce][ge]["case_id_list"] = case_id_list
-            cnv[ce][ge]["frequency"] = round(freq * 100, 2)
 
     # print('debug: cnv {}'.format(cnv))
     if cnv_and_ssm_flag:

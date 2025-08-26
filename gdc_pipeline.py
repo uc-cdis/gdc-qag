@@ -131,7 +131,7 @@ def construct_and_execute_api_call(
 
 
 # generate llama model pct response
-@spaces.GPU(duration=60)
+@spaces.GPU(duration=20)
 def generate_percentage_response(modified_query, model, tok):
     set_seed(1042)
     regex = "The final response is: \d*\.\d*%"
@@ -148,7 +148,7 @@ def generate_percentage_response(modified_query, model, tok):
 
 
 # generate llama model descriptive response
-@spaces.GPU(duration=60)
+@spaces.GPU(duration=20)
 def generate_descriptive_response(modified_query, model, tok):
     set_seed(1042)    
     lm = Transformers(model=model, tokenizer=tok)
@@ -286,6 +286,7 @@ def execute_pipeline(
     tok, intent_model, intent_tok, 
     project_mappings, output_file_prefix
 ):
+    
     df[
         [
             "llama_base_output",
@@ -339,7 +340,7 @@ def execute_pipeline(
         columns={
             "llama_base_output": "llama-3B baseline output",
             "descriptive_prompt": "Descriptive prompt",
-            "percentage_prompt": "Descriptive prompt",
+            "percentage_prompt": "Query augmented prompt",
             "gdc_result": "GDC Result",
             "gdc_qag_base_stat": "GDC-QAG frequency",
             "llama_base_stat": "llama-3B baseline frequency",
@@ -348,7 +349,7 @@ def execute_pipeline(
             "cancer_entities": "Cancer entities",
             "gene_entities": "Gene entities",
             "mutation_entities": "Mutation entities",
-            "questions": "Question",
+            "questions": "Question"
         },
         inplace=True,
     )

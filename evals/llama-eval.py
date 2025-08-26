@@ -26,10 +26,10 @@ sampling_params_with_constrained_decoding = SamplingParams(
 
 ########## global variables ########################
 # hugging face model
-# https://huggingface.co/Qwen/Qwen1.5-4B-Chat
-model_id = "Qwen/Qwen1.5-4B-Chat"
+model_id = "meta-llama/Llama-3.2-3B-Instruct"
 
-HF_TOKEN = os.environ.get("HF_TOKEN") or True
+# export HF_TOKEN as an envvar
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 llm = LLM(model=model_id, trust_remote_code=True, enforce_eager=True, dtype='half', max_model_len=8192)
 
@@ -43,28 +43,28 @@ def construct_modified_query_base_llm(query):
 def batch_test(query):
     modified_query = construct_modified_query_base_llm(query)
     try:
-        qwen_base_output = (
+        llama_base_output = (
             llm.generate(modified_query, sampling_params_with_constrained_decoding)[0]
             .outputs[0]
             .text
         )
     except Exception as e:
-        print("unable to get qwen base output for q {} {}".format(query, e))
-        qwen_base_output = "no output obtained"
+        print("unable to get llama base output for q {} {}".format(query, e))
+        llama_base_output = "no output obtained"
 
-    return pd.Series(qwen_base_output)
+    return pd.Series(llama_base_output)
 
 
 def main():
 
     # change to csv with questions
-    questions = pd.read_csv("csvs/questions.csv")
-    print("getting qwen model responses on questions")
-    questions["qwen_base_output"] = questions["questions"].progress_apply(
+    questions = pd.read_csv("csvs/tests.csv")
+    print("getting llama-3B model responses on questions")
+    questions["llama_base_output"] = questions["questions"].progress_apply(
         lambda x: batch_test(x)
     )
     print("done generation questions , dumping to CSV")
-    questions.to_csv("csvs/qwen.results.csv")
+    questions.to_csv("csvs/llama.tests.results.csv")
 
 
 if __name__ == "__main__":
