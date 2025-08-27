@@ -58,13 +58,13 @@ def batch_test(query):
 def main():
 
     # change to csv with questions
-    questions = pd.read_csv("csvs/tests.csv")
+    questions = pd.read_csv("csvs/questions.csv")
     print("getting llama-3B model responses on questions")
     questions["llama_base_output"] = questions["questions"].progress_apply(
         lambda x: batch_test(x)
     )
     print("done generation questions , dumping to CSV")
-    questions.to_csv("csvs/llama.tests.results.csv")
+    questions.to_csv("csvs/llama_retest.questions.results.csv")
 
 
 if __name__ == "__main__":

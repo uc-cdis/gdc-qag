@@ -58,13 +58,13 @@ def batch_test(query):
 def main():
 
     # change to csv with questions
-    questions = pd.read_csv("csvs/questions.csv")
+    questions = pd.read_csv("csvs/tests.csv")
     print("getting qwen model responses on questions")
     questions["qwen_base_output"] = questions["questions"].progress_apply(
         lambda x: batch_test(x)
     )
     print("done generation questions , dumping to CSV")
-    questions.to_csv("csvs/qwen.results.csv")
+    questions.to_csv("csvs/qwen.tests.results.csv")
 
 
 if __name__ == "__main__":
