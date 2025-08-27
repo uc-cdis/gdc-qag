@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import re
 from types import SimpleNamespace
 import json
 import pandas as pd
@@ -121,7 +122,7 @@ def construct_and_execute_api_call(
         api_call_result = []
         cancer_entities = []
     return SimpleNamespace(
-        helper_output=api_call_result,
+        gdc_result=api_call_result,
         cancer_entities=cancer_entities,
         intent=intent,
         gene_entities=gene_entities,
@@ -129,23 +130,38 @@ def construct_and_execute_api_call(
     )
 
 
-# generate llama model response
-@spaces.GPU(duration=60)
-def generate_response(modified_query, model, tok):
+# generate llama model pct response
+@spaces.GPU(duration=20)
+def generate_percentage_response(modified_query, model, tok):
     set_seed(1042)
-    regex = "The final answer is: \d*\.\d*%"
+    regex = "The final response is: \d*\.\d*%"
     lm = Transformers(model=model, tokenizer=tok)
     lm += modified_query
     lm += guidance_gen(
-        "gen_response",
+        "pct_response",
         n=1,
         temperature=0,
-        max_tokens=1000,
-        # to try remove repetition, this is not a param in guidance
-        # repetition_penalty=1.2,
+        max_tokens=40,
         regex=regex,
     )
-    return lm["gen_response"]
+    return lm["pct_response"]
+
+
+# generate llama model descriptive response
+@spaces.GPU(duration=20)
+def generate_descriptive_response(modified_query, model, tok):
+    set_seed(1042)    
+    lm = Transformers(model=model, tokenizer=tok)
+    lm += modified_query
+    lm += guidance_gen(
+        "desc_response",
+        n=1,
+        temperature=0,
+        max_tokens=100,
+        regex="^[^\\n]*[.\S+]$",
+    )
+    return lm["desc_response"]
+
 
 
 def batch_test(
@@ -159,7 +175,7 @@ def batch_test(
 ):
     modified_query = utilities.construct_modified_query_base_llm(query)
     print(f"obtain baseline llama-3B response on modified query: {modified_query}")
-    llama_base_output = generate_response(modified_query, model, tok)
+    llama_base_output = generate_percentage_response(modified_query, model, tok)
     print(f"llama-3B baseline response: {llama_base_output}")
     try:
         result = construct_and_execute_api_call(
@@ -167,25 +183,25 @@ def batch_test(
         )
     except Exception as e:
         # unable to compute at this time, recheck
-        result.helper_output = []
+        result.gdc_result = []
         result.cancer_entities = []
     # if there is not a helper output for each unique cancer entity
     # log error to inspect and reprocess query later
     try:
-        len(result.helper_output) == len(result.cancer_entities)
+        len(result.gdc_result) == len(result.cancer_entities)
     except Exception as e:
-        msg = "there is not a unique helper output for each unique \
+        msg = "there is not a unique gdc result for each unique \
     cancer entity in {}".format(
             query
         )
         print("exception {}".format(msg))
-        result.helper_output = []
+        result.gdc_result = []
         result.cancer_entities = []
 
     return pd.Series(
         [
             llama_base_output,
-            result.helper_output,
+            result.gdc_result,
             result.cancer_entities,
             result.intent,
             result.gene_entities,
@@ -210,16 +226,30 @@ def setup_args():
 def get_prefinal_response(row, model, tok):
     try:
         query = row["questions"]
-        helper_output = row["helper_output"]
+        genes = ','.join(row['gene_entities'])
+        gdc_result = row["gdc_result"]
     except Exception as e:
-        print(f"unable to retrieve query: {query} or helper_output: {helper_output}")
-    print("\nStep 6: Augment LLM prompt for llama-3B\n")
-    modified_query = utilities.construct_modified_query(query, helper_output)
-    print("{}".format(modified_query))
-    print("\nStep 7: Generate LLM response R on query augmented prompt\n")
-    prefinal_llama_with_helper_output = generate_response(modified_query, model, tok)
-    print("{}".format(prefinal_llama_with_helper_output))
-    return pd.Series([modified_query, prefinal_llama_with_helper_output])
+        print(f"unable to retrieve query: {query} or gdc_result: {gdc_result}")
+    
+    intent = utilities.intent_expansion[row['intent']]
+
+    print("\nStep 6: Construct LLM prompts for llama-3B\n")
+    descriptive_prompt = utilities.construct_modified_query_description(genes, intent)
+    percentage_prompt = utilities.construct_modified_query_percentage(query, gdc_result)
+    
+    print("\nStep 7: Generate LLM response R on query augmented prompts\n")
+    descriptive_response = generate_descriptive_response(descriptive_prompt, model, tok)
+    if not descriptive_response.endswith('.'):
+        descriptive_response += '.'
+    
+    percentage_response = generate_percentage_response(percentage_prompt, model, tok)
+    percentage_response = re.sub(
+        r'final response', 'frequency for your query', percentage_response)
+    return pd.Series([
+        descriptive_prompt, percentage_prompt, 
+        descriptive_response, percentage_response
+        ])
+    
 
 
 def setup_models_and_data():
@@ -256,10 +286,11 @@ def execute_pipeline(
     tok, intent_model, intent_tok, 
     project_mappings, output_file_prefix
 ):
+    
     df[
         [
             "llama_base_output",
-            "helper_output",
+            "gdc_result",
             "cancer_entities",
             "intent",
             "gene_entities",
@@ -277,10 +308,11 @@ def execute_pipeline(
         )
     )
 
-    # retain responses with helper output
+    # retain responses with gdc_result
 
-    df_exploded = df.explode('helper_output', ignore_index=True)
-    df_exploded[["modified_prompt", "pre_final_llama_with_helper_output"]] = (
+    df_exploded = df.explode('gdc_result', ignore_index=True)
+
+    df_exploded[["descriptive_prompt", "percentage_prompt", "descriptive_response", "percentage_response"]] = (
         df_exploded.progress_apply(
             lambda x: get_prefinal_response(x, model, tok), axis=1
         )
@@ -288,38 +320,36 @@ def execute_pipeline(
 
     ### final check and confirmation 
     print("\nStep 8: Final check and confirmation\n")
+    
+    # postprocess descriptive response + percentage response
     df_exploded[
         [
-            "llama_base_stat",
-            "delta_llama",
-            "value_changed",
-            "ground_truth_stat",
-            "generated_stat_prefinal",
-            "delta_prefinal",
-            "generated_stat_final",
-            "delta_final",
-            "final_response",
+            'llama_base_stat', 
+            'gdc_qag_base_stat', 
+            'final_gdc_qag_desc_response', 
+            'final_gdc_qag_percentage_response', 
+            'final_gdc_qag_response'
         ]
     ] = df_exploded.progress_apply(
-        lambda x: utilities.postprocess_response(x), axis=1
-    )
-
+        lambda row: utilities.postprocess_response(tok, row), axis=1)
+    
     final_columns = utilities.get_final_columns()
     result = df_exploded[final_columns].copy()
+
     result.rename(
         columns={
             "llama_base_output": "llama-3B baseline output",
-            "modified_prompt": "Query augmented prompt",
-            "helper_output": "GDC Result",
-            "ground_truth_stat": "Ground truth frequency from GDC",
+            "descriptive_prompt": "Descriptive prompt",
+            "percentage_prompt": "Query augmented prompt",
+            "gdc_result": "GDC Result",
+            "gdc_qag_base_stat": "GDC-QAG frequency",
             "llama_base_stat": "llama-3B baseline frequency",
-            "delta_llama": "llama-3B frequency - Ground truth frequency",
-            "final_response": "Query augmented generation",
+            "final_gdc_qag_response": "Query augmented generation",
             "intent": "Intent",
             "cancer_entities": "Cancer entities",
             "gene_entities": "Gene entities",
             "mutation_entities": "Mutation entities",
-            "questions": "Question",
+            "questions": "Question"
         },
         inplace=True,
     )
