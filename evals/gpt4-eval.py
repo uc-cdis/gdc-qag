@@ -48,7 +48,7 @@ def define_general_prompt():
 
 def get_gpt4_response(client, general_prompt, question):
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-2024-08-06",
         temperature=0.0,
         seed=2000,
         response_format={"type": "json_object"},
@@ -76,7 +76,7 @@ def main():
     # check model availability
     print(client.models.list())
 
-    eval_dataset = pd.read_csv("csvs/questions.csv")
+    eval_dataset = pd.read_csv("csvs/tests.csv")
     # eval_dataset = eval_dataset.head(n=2)
     general_prompt = define_general_prompt()
 
@@ -87,7 +87,7 @@ def main():
     )
 
     print("done generation questions , dumping to CSV")
-    eval_dataset.to_csv("csvs/gpt4.results.csv")
+    eval_dataset.to_csv("csvs/gpt4.tests.results.csv")
 
 
 if __name__ == "__main__":
