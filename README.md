@@ -72,7 +72,7 @@ GDC-QAG relies on GDC /project endpoint to accurately map disease information fr
 ## Structure of this repository and useful files
 
 - `csvs`: contains csv files for testing
-- `evals`: contains code for evaluation of `Qwen-4B` model and low level eval of `GPT-4o` model. Full evaluation of `GPT-4o` see `notebooks`
+- `evals`: contains code for evaluation of `Qwen-4B` model (`qwen-eval.py`) and `llama-3B` model (`llama-eval.py`). Both use the vLLM framework. For quick tests and eval of `GPT-4o` model, see (`gpt4-eval.py`). For full evaluation of `GPT-4o` on all questions see `open_ai_batch.ipynb` in `notebooks`
 - `figs`: figures from paper
 - `methods`: helper methods and utility functions for QAG
 
@@ -87,6 +87,8 @@ GDC-QAG relies on GDC /project endpoint to accurately map disease information fr
 - `mcp_tools.ipynb`: an example of MCP client server execution using gradio exposed MCP server URL
 
 `gdc_pipeline.py`: this is the entrypoint code for launching QAG
+
+`truth.py`: code for getting variant frequencies in `GVT`
 
 Note that vllm is pinned to 0.7.2 and transformers to 4.49.0
 
