@@ -70,9 +70,17 @@ def construct_and_execute_api_call(
         )
     )
     # Infer entities
-    initial_cancer_entities = utilities.return_initial_cancer_entities(
-        query, model="en_ner_bc5cdr_md"
-    )
+    initial_cancer_entities = utilities.check_if_project_id_in_query(
+        project_mappings.keys(), query)
+
+    if not initial_cancer_entities:
+        try:
+            initial_cancer_entities = utilities.return_initial_cancer_entities(
+                query, model="en_ner_bc5cdr_md"
+            )
+        except Exception as e:
+            print('no cancer entities found with en_ner_bc5cdr_md model')
+            initial_cancer_entities = []
 
     if not initial_cancer_entities:
         try:
@@ -80,7 +88,7 @@ def construct_and_execute_api_call(
                 query, model="en_core_sci_md"
             )
         except Exception as e:
-            print("unable to guess cancer entities {}".format(str(e)))
+            print("no cancer entities found with en_core_sci_md model{}".format(str(e)))
             initial_cancer_entities = []
 
     cancer_entities = utilities.postprocess_cancer_entities(
@@ -354,11 +362,11 @@ def execute_pipeline(
         inplace=True,
     )
     result.index = ["GDC-QAG results"] * len(result)
-    print(
-        "Query Augmented Generation final response {}".format(
-            "\n".join(result["Query augmented generation"].astype(str))
-        )
-    )
+    # print('####### result ########### {}'.format(result))
+    if result.shape[0] > 1:
+        result['response_with_cancer'] = result['Query augmented generation'] + '.' + result['GDC Result']
+        qag_final = "\n".join(result['response_with_cancer'].astype(str))
+
     print("completed")
     
     if output_file_prefix:
@@ -366,7 +374,10 @@ def execute_pipeline(
         print("writing final results to {}".format(final_output))
         result.to_csv(final_output, index=0)
     else:
-        print(json.dumps(result.T.to_dict(), indent=2))
+        if result.shape[0] > 1:
+            print(qag_final)
+        else:
+            print(json.dumps(result.T.to_dict(), indent=2))
     print('completed')
     return result
 
