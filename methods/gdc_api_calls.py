@@ -271,8 +271,10 @@ def return_joint_single_cnv_frequency(cnv, cnv_change, cnv_change_5_category):
         total_number_of_cases_with_cnv_data = get_available_cnv_data_for_project(ce)
         # skip if total number of cnv cases from API is 0
         if not total_number_of_cases_with_cnv_data:
-            continue
-        
+            print('could not retrieve total number of cases with CNV data for {}'.format(ce))
+            total_number_of_cases_with_cnv_data = 0
+
+
         print('\nStep 5: Query GDC and process results\n')
         print('total number of cases with CNV data {}'.format(
                 total_number_of_cases_with_cnv_data))
@@ -286,9 +288,12 @@ def return_joint_single_cnv_frequency(cnv, cnv_change, cnv_change_5_category):
             shared_cases = list(reduce(lambda x, y: x & y, cases_with_cnvs))
             print('number of shared cases {}'.format(len(shared_cases)))
             print('preparing a GDC Result for query augmentation...')
-            joint_frequency = round(
-                (len(shared_cases) / total_number_of_cases_with_cnv_data) * 100, 2
-            )
+            try:
+                joint_frequency = round(
+                    (len(shared_cases) / total_number_of_cases_with_cnv_data) * 100, 2
+                )
+            except Exception as e:
+                joint_frequency = 0
             gdc_result = "joint frequency in {} is {}%".format(ce, joint_frequency)
             print('prepared GDC Result: {}'.format(gdc_result))
             result_text.append(gdc_result)
@@ -296,7 +301,10 @@ def return_joint_single_cnv_frequency(cnv, cnv_change, cnv_change_5_category):
             joint_frequency = 0
             num_cases_with_cnvs = len(set(cnv[ce][genes[0]]["case_id_list"]))
             print('number of cases with cnvs {}'.format(num_cases_with_cnvs))
-            frequency = round((num_cases_with_cnvs / total_number_of_cases_with_cnv_data) * 100, 2)
+            try:
+                frequency = round((num_cases_with_cnvs / total_number_of_cases_with_cnv_data) * 100, 2)
+            except Exception as e:
+                frequency = 0
             
             for k2, v2 in v.items():
                 print('preparing a GDC Result for query augmentation...')
