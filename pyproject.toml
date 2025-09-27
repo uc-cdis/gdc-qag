@@ -40,6 +40,7 @@ dependencies = [
     "sseclient (>=0.0.27,<0.0.28)",
     "langchain-mcp-adapters (>=0.1.9,<0.2.0)",
     "langchain-anthropic (>=0.3.18,<0.4.0)",
+    "sentence-transformers (>=5.1.1,<6.0.0)",
 ]
 package-mode = false
 
