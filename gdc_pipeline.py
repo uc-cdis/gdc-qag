@@ -18,6 +18,9 @@ from methods import gdc_api_calls, utilities
 tqdm.pandas()
 
 
+
+
+
 def execute_api_call(
     intent,
     gene_entities,
@@ -78,6 +81,7 @@ def construct_and_execute_api_call(
             initial_cancer_entities = utilities.return_initial_cancer_entities(
                 query, model="en_ner_bc5cdr_md"
             )
+            print('init_cancer_e {}'.format(initial_cancer_entities))
         except Exception as e:
             print('no cancer entities found with en_ner_bc5cdr_md model')
             initial_cancer_entities = []
@@ -94,6 +98,7 @@ def construct_and_execute_api_call(
     cancer_entities = utilities.postprocess_cancer_entities(
         project_mappings, initial_cancer_entities=initial_cancer_entities, query=query
     )
+
 
     # if cancer entities is empty from above methods
     # return all projects
@@ -234,28 +239,20 @@ def setup_args():
 def get_prefinal_response(row, model, tok):
     try:
         query = row["questions"]
-        genes = ','.join(row['gene_entities'])
         gdc_result = row["gdc_result"]
     except Exception as e:
         print(f"unable to retrieve query: {query} or gdc_result: {gdc_result}")
     
-    intent = utilities.intent_expansion[row['intent']]
 
-    print("\nStep 6: Construct LLM prompts for llama-3B\n")
-    descriptive_prompt = utilities.construct_modified_query_description(genes, intent)
+    print("\nStep 6: Construct LLM prompts (percentage) for llama-3B\n")
     percentage_prompt = utilities.construct_modified_query_percentage(query, gdc_result)
     
-    print("\nStep 7: Generate LLM response R on query augmented prompts\n")
-    descriptive_response = generate_descriptive_response(descriptive_prompt, model, tok)
-    if not descriptive_response.endswith('.'):
-        descriptive_response += '.'
-    
+    print("\nStep 7: Generate LLM response R (percentage) on query augmented prompts\n")
     percentage_response = generate_percentage_response(percentage_prompt, model, tok)
     percentage_response = re.sub(
         r'final response', 'frequency for your query', percentage_response)
     return pd.Series([
-        descriptive_prompt, percentage_prompt, 
-        descriptive_response, percentage_response
+        percentage_prompt, percentage_response
         ])
     
 
@@ -317,10 +314,22 @@ def execute_pipeline(
     )
 
     # retain responses with gdc_result
-
     df_exploded = df.explode('gdc_result', ignore_index=True)
 
-    df_exploded[["descriptive_prompt", "percentage_prompt", "descriptive_response", "percentage_response"]] = (
+    # generate descriptive response once based on genes and intent
+    print("\nStep 6: Construct LLM prompts (descriptive) for llama-3B\n")
+    intent = utilities.intent_expansion[df['intent'].iloc[0]]
+    genes = ','.join(df['gene_entities'].iloc[0])
+    descriptive_prompt = utilities.construct_modified_query_description(genes, intent)
+    
+    print("\nStep 7: Generate LLM response R (descriptive) on query augmented prompts\n")
+    descriptive_response = generate_descriptive_response(descriptive_prompt, model, tok)
+    if not descriptive_response.endswith('.'):
+        descriptive_response += '.'
+
+    df_exploded[['descriptive_prompt', 'descriptive_response']] = descriptive_prompt, descriptive_response
+    
+    df_exploded[["percentage_prompt", "percentage_response"]] = (
         df_exploded.progress_apply(
             lambda x: get_prefinal_response(x, model, tok), axis=1
         )
