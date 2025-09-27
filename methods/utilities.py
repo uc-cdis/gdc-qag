@@ -11,6 +11,11 @@ import torch
 import warnings
 
 from functools import reduce, wraps
+from itertools import chain
+from sentence_transformers import SentenceTransformer, util
+
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
 
 # spacy warning, upgrade to latest spacy
 # in the next release
@@ -47,6 +52,30 @@ def timeit(fn):
         print(f"{fn.__name__} took {end - start:.4f} seconds")
         return result
     return wrapper
+
+
+
+def get_top_k_cancer_entities(query, row_embeddings, project_rows, top_k=20):
+    top_cancer_entities = []
+    query_embedding = model.encode(query, convert_to_tensor=True)
+    cosine_scores = util.cos_sim(query_embedding, row_embeddings)
+    # best_idx = cosine_scores.argmax() best row
+    # print("Best row:", rows[best_idx])
+    top_results = torch.topk(cosine_scores, k=top_k)
+    top_results_indices = top_results.indices.tolist()
+    top_results_scores = top_results.values.tolist()
+    print(top_results_scores)
+    for idx, score in enumerate(top_results_scores[0]):
+        if score > 0.5:
+            row_idx = top_results_indices[0][idx]
+            print('best row, score: {} {}'.format(project_rows[row_idx], score))
+            top_cancer_entities.append([project_rows[row_idx], score])
+    try:
+        top_projects = [sublist[0].split(',')[0] for sublist in top_cancer_entities]
+    except Exception as e:
+        top_projects = []
+    return top_projects
+
 
 
 def load_llama_llm(AUTH_TOKEN):
@@ -379,6 +408,7 @@ def proj_id_and_partial_match(query, project_mappings, initial_cancer_entities):
 
 def postprocess_cancer_entities(project_mappings, initial_cancer_entities, query):
     # print('initial cancer entities {}'.format(initial_cancer_entities))
+    project_rows, row_embeddings = gdc_api_calls.get_project_embeddings()
     project_list = project_mappings.keys()
     # print('check if GDC project-id mentioned in query')
     final_entities = check_if_project_id_in_query(project_list, query)
@@ -400,6 +430,13 @@ def postprocess_cancer_entities(project_mappings, initial_cancer_entities, query
                 final_entities = proj_id_and_partial_match(
                     query, project_mappings, initial_cancer_entities
                 )
+            # try embedding based match
+            if not final_entities:
+                print('test embedding based match')
+                for i in initial_cancer_entities:
+                    c_entities = get_top_k_cancer_entities(i, row_embeddings, project_rows)
+                    final_entities.append(c_entities)
+                final_entities = list(chain.from_iterable(final_entities))
         else:
             # no initial_cancer_entities
             # check project_mappings keys/values for matches with query terms

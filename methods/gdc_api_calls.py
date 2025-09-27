@@ -8,8 +8,12 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from sentence_transformers import SentenceTransformer, util
+
 
 proj_root = Path(__file__).resolve().parent.parent
+
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
 # match "lymphoid leukemia" in query to "lymphoid leukemias" in GDC disease_type
@@ -21,6 +25,18 @@ project_mappings = pd.read_csv(
 )
 project_mappings["desc"] = project_mappings["desc"].apply(ast.literal_eval)
 project_mappings = project_mappings["desc"].to_dict()
+
+
+
+def get_project_embeddings():
+    project_rows = []
+    for k,v in project_mappings.items():
+        new_v = [item.replace(',', '') for item in v]
+        combined = ','.join([k] + new_v)
+        project_rows.append(combined)
+    row_embeddings = model.encode(project_rows, convert_to_tensor=True)
+    return project_rows, row_embeddings
+
 
 
 def get_gene_mutation_data(start, stop, step):
