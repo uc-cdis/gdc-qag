@@ -525,8 +525,13 @@ def postprocess_response(tok, row):
         gdc_result = np.nan
     
     try:
-        # extract gdc_result percentage from gdc_result
-        gdc_result_percentage = float(re.search(pattern, gdc_result).group(1))
+    # extract gdc_result percentage from gdc_result
+        match = re.search(pattern, gdc_result)
+        if match:
+            gdc_result_percentage = float(match.group(1))
+        else:
+            gdc_result_percentage = np.nan
+            print('no data available in gdc')    
     except Exception as e:
         print('unable to extract percentage from gdc result {}'.format(
             str(e)))
