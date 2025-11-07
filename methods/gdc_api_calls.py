@@ -633,48 +633,80 @@ def run_cnv_ssm_api(decompose_result, cancer_entities, query):
     return result, cancer_entities
 
 
-def get_top_cases_counts_by_gene(gene_entities, cancer_entities):
+
+
+def parse_mutation_freq(ensembl_gene_ids, cancer_entities):
+    result = []
+    for ce in cancer_entities:
+        gene1_ssms = get_cases_with_ssms_in_a_gene(ce, ensembl_gene_ids[0])
+        total_cases_with_ssms = get_available_ssm_data_for_project(ce)
+        if len(ensembl_gene_ids) > 1:
+            gene2_ssms = get_cases_with_ssms_in_a_gene(ce, ensembl_gene_ids[1])
+            shared = set(gene1_ssms).intersection(set(gene2_ssms))
+            joint_freq = len(shared)/total_cases_with_ssms
+            gene1_freq = len(gene1_ssms)/total_cases_with_ssms
+            gene2_freq = len(gene2_ssms)/total_cases_with_ssms
+            gdc_result = f'frequency of cases with mutations in both {ensembl_gene_ids} is {joint_freq}%, in only {ensembl_gene_ids[0]} is {gene1_freq}%, in only {ensembl_gene_ids[1]} is {gene2_freq}%'
+            result.append(gdc_result)
+
+        else:
+            freq = len(gene1_ssms)/total_cases_with_ssms
+            gdc_result = f'frequency of cases with mutations in {ensembl_gene_ids[0]} is {freq}%'
+            result.append(gdc_result)
+    return result, cancer_entities
+
+
+
+def get_top_cases_counts_by_gene(gene_entities, cancer_entities, query):
+    query = query.lower()
     top_cases_counts_by_gene = {}
     result = []
-    emsembl_gene_ids = get_ensembl_gene_ids(gene_entities)
+    ensembl_gene_ids = get_ensembl_gene_ids(gene_entities)
+    
     if not cancer_entities:
         cancer_entities = list(project_mappings.keys())
-    for ce in cancer_entities:
-        top_cases_counts_by_gene[ce] = {}
-        # note this gives you ssm + cnv
-        endpt = "https://api.gdc.cancer.gov/analysis/top_cases_counts_by_genes?gene_ids={}".format(
-            ",".join(emsembl_gene_ids)
-        )
-        print('build API call, endpt: {}'.format(endpt))
-        response = requests.get(endpt)
-        response_json = json.loads(response.content)
-        try:
-            for item in response_json["aggregations"]["projects"]["buckets"]:
-                if item["key"] == ce:
-                    cases_with_mutations = item["doc_count"]
-            # total_case_count = get_available_ssm_data_for_project(ce)
-            total_case_count = get_total_variation_data_for_project(project=ce)
-            cases_without_mutations = total_case_count - cases_with_mutations
-            top_cases_counts_by_gene[ce]["cases_with_mutations"] = cases_with_mutations
-            top_cases_counts_by_gene[ce][
-                "cases_without_mutations"
-            ] = cases_without_mutations
-            top_cases_counts_by_gene[ce]["total_case_count"] = total_case_count
-            print('\nStep 5: Query GDC and process results\n')
-            print('obtained {} cases with mutations and a total case count of {}'.format(
-                cases_with_mutations, total_case_count
-            ))
-            freq = cases_with_mutations / total_case_count
-            top_cases_counts_by_gene[ce]["frequency"] = round(freq * 100, 2)
-            print('preparing a GDC Result for query augmentation...')
-            gdc_result = "The frequency of cases with mutations in {} is {}%".format(
-                    ce, top_cases_counts_by_gene[ce]["frequency"]
-                )
-            result.append(gdc_result)
-        except Exception as e:
-            result.append("frequency unavailable from API for {}".format(ce))
-    print('prepared GDC Result {}'.format(gdc_result))
-    cancer_entities = list(top_cases_counts_by_gene.keys())
+    
+    # for queries asking about frequency of mutations in genes
+    if not 'copy number' in query:
+        result, cancer_entities = parse_mutation_freq(ensembl_gene_ids, cancer_entities)
+    # queries asking about cnvs or ssms or both
+    else:
+        for ce in cancer_entities:
+            top_cases_counts_by_gene[ce] = {}
+            # note this gives you ssm + cnv
+            endpt = "https://api.gdc.cancer.gov/analysis/top_cases_counts_by_genes?gene_ids={}".format(
+                ",".join(ensembl_gene_ids)
+            )
+            print('build API call, endpt: {}'.format(endpt))
+            response = requests.get(endpt)
+            response_json = json.loads(response.content)
+            try:
+                for item in response_json["aggregations"]["projects"]["buckets"]:
+                    if item["key"] == ce:
+                        cases_with_mutations = item["doc_count"]
+                # total_case_count = get_available_ssm_data_for_project(ce)
+                total_case_count = get_total_variation_data_for_project(project=ce)
+                cases_without_mutations = total_case_count - cases_with_mutations
+                top_cases_counts_by_gene[ce]["cases_with_mutations"] = cases_with_mutations
+                top_cases_counts_by_gene[ce][
+                    "cases_without_mutations"
+                ] = cases_without_mutations
+                top_cases_counts_by_gene[ce]["total_case_count"] = total_case_count
+                print('\nStep 5: Query GDC and process results\n')
+                print('obtained {} cases with mutations and a total case count of {}'.format(
+                    cases_with_mutations, total_case_count
+                ))
+                freq = cases_with_mutations / total_case_count
+                top_cases_counts_by_gene[ce]["frequency"] = round(freq * 100, 2)
+                print('preparing a GDC Result for query augmentation...')
+                gdc_result = "The frequency of cases with mutations in {} is {}%".format(
+                        ce, top_cases_counts_by_gene[ce]["frequency"]
+                    )
+                result.append(gdc_result)
+            except Exception as e:
+                result.append("frequency unavailable from API for {}".format(ce))
+        print('prepared GDC Result {}'.format(gdc_result))
+        cancer_entities = list(top_cases_counts_by_gene.keys())
     return result, cancer_entities
 
 

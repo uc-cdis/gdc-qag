@@ -54,7 +54,7 @@ def execute_api_call(
         )
     elif intent == "top_cases_counts_by_gene":
         result, cancer_entities = gdc_api_calls.get_top_cases_counts_by_gene(
-            gene_entities, cancer_entities
+            gene_entities, cancer_entities, query
         )
     elif intent == "project_summary":
         result = gdc_api_calls.get_project_summary(cancer_entities)
@@ -75,6 +75,11 @@ def construct_and_execute_api_call(
     # Infer entities
     initial_cancer_entities = utilities.check_if_project_id_in_query(
         project_mappings.keys(), query)
+    
+    if not initial_cancer_entities:
+        initial_cancer_entities = utilities.check_if_project_val_in_query(
+            project_mappings, query
+        )
 
     if not initial_cancer_entities:
         try:

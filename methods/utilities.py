@@ -383,6 +383,17 @@ def check_if_project_id_in_query(project_list, query):
     return final_entities
 
 
+def check_if_project_val_in_query(project_mappings, query):
+    final_entities = []
+    lc_query = query.lower()
+    for k, v in project_mappings.items():
+        project_name = v[-1]
+        if project_name.lower() in lc_query:
+            final_entities.append(k)
+            return final_entities
+
+
+
 def proj_id_and_partial_match(query, project_mappings, initial_cancer_entities):
     final_entities = []
     if initial_cancer_entities:
@@ -411,7 +422,7 @@ def postprocess_cancer_entities(project_mappings, initial_cancer_entities, query
     project_rows, row_embeddings = gdc_api_calls.get_project_embeddings()
     project_list = project_mappings.keys()
     # print('check if GDC project-id mentioned in query')
-    final_entities = check_if_project_id_in_query(project_list, query)
+    final_entities = check_if_project_id_in_query(project_list, query) or check_if_project_val_in_query(project_mappings, query)
     if final_entities:
         return final_entities
     else:
@@ -441,7 +452,7 @@ def postprocess_cancer_entities(project_mappings, initial_cancer_entities, query
             # no initial_cancer_entities
             # check project_mappings keys/values for matches with query terms
             # print('test 3 (w/o initial entities): no result from GDC projects endpt, check for matches '
-            #      'between query terms and gdc project_mappings')
+            # 'between query terms and gdc project_mappings')
             final_entities = proj_id_and_partial_match(
                 query, project_mappings, initial_cancer_entities
             )
