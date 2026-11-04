@@ -2,7 +2,7 @@
 
 NOTE: This repo is no longer maintained, please see https://github.com/uc-cdis/qag-agent-demo for agentic version of this project
 
-This repo contains code for Query Augmented Generation on the Genomic Data Commons as described in the up-coming paper. 
+This repo contains old code for Query Augmented Generation on the Genomic Data Commons (gdc-qag V1). 
 To run this code, you need access to the `meta-llama/Llama-3.2-3B-Instruct` model. This is a gated model.
 You also need access to a V100 GPU with 16 GB GPU RAM.
 
